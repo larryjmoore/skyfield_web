@@ -1,11 +1,19 @@
 import io
 import datetime
+import logging
 from flask import Flask, send_file, request
 import pytz
 from skyfield.api import Loader
 import bodies
 
 app = Flask(__name__)
+
+logging.basicConfig(
+    filename='requests.log', 
+    level=logging.INFO, 
+    format='%(asctime)s | %(message)s', 
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 DEFAULT_LAT = 40.7608
 DEFAULT_LON = -111.8910
@@ -19,6 +27,16 @@ TS = load.timescale()
 
 @app.route('/skychart.png')
 def serve_sky_chart():
+    if request.headers.getlist("X-Forwarded-For"):
+        # The header often looks like "ClientIP, Proxy1, Proxy2"
+        # We want the first one.
+        visitor_ip = request.headers.getlist("X-Forwarded-For")[0].split(',')[0]
+    else:
+        visitor_ip = request.remote_addr
+    
+    requested_url = request.full_path.strip()
+    logging.info(f"{visitor_ip} | {requested_url}")
+    
     try:
         lat = float(request.args.get('lat', DEFAULT_LAT))
         lon = float(request.args.get('lon', DEFAULT_LON))
