@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skyfield_web"
+version = "0.1.0"
+dependencies = [
+    "flask",
+    "skyfield",
+    "matplotlib",
+    "pytz",
+]
+
+[project.scripts]
+skyfield_web = "skyfield_web.app:main"
+
+[tool.setuptools]
+packages = ["skyfield_web"]
