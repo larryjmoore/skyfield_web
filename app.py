@@ -36,7 +36,7 @@ def serve_sky_chart():
     
     requested_url = request.full_path.strip()
     logging.info(f"{visitor_ip} | {requested_url}")
-    
+
     try:
         lat = float(request.args.get('lat', DEFAULT_LAT))
         lon = float(request.args.get('lon', DEFAULT_LON))
@@ -51,7 +51,7 @@ def serve_sky_chart():
         if val is None: return default
         return val.lower() in ['true', '1', 'yes', 'on']
 
-    show_analemma = is_true('show_analemma', True)
+    show_analemma = is_true('show_analemma', False)
     show_constellations = is_true('show_constellation', False)
     show_planets = is_true('show_planets', True)
     north_up = is_true('north_up', False)

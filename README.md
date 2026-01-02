@@ -90,7 +90,7 @@ You can customize the chart by providing query parameters:
 *   `lon`: Longitude (e.g., `-118.2437`)
 *   `elevation`: Elevation in meters (e.g., `1447`)
 *   `timezone`: IANA Time Zone Database name (e.g., `America/Los_Angeles`)
-*   `show_analemma`: `true` or `false` (default: `true`)
+*   `show_analemma`: `true` or `false` (default: `false`)
 *   `show_constellation`: `true` or `false` (default: `false`)
 *   `show_planets`: `true` or `false` (default: `true`)
 *   `north_up`: `true` or `false` (default: `false`)
