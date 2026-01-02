@@ -6,7 +6,7 @@ This project is a Python-based web application that generates a sky chart image 
 
 The application is designed to be integrated with Home Assistant using a Picture Card entity, but can also function as a standalone service as well.
 
-You can access it via https://skyfieldweb.duckdns.org/skychart.png. Make sure to see below for how to customize the URL for your setup.
+If you would rather use my setup directly, you can access it now via https://skyfieldweb.duckdns.org/skychart.png. Make sure to see below for how to customize the URL for your setup.
 
 ## Features
 
@@ -96,6 +96,9 @@ You can customize the chart by providing query parameters:
 *   `north_up`: `true` or `false` (default: `false`)
 *   `show_time`: `true` or `false` (default: `true`)
 *   `show_legend`: `true` or `false` (default: `true`)
+
+Optional overrides to force a specific day and time:
+
 *   `year`: Year (e.g., `2026`)
 *   `month`: Month (e.g., `1` for January)
 *   `day`: Day (e.g., `15`)
