@@ -4,7 +4,7 @@
 
 This project is a Python-based web application that generates a sky chart image showing the apparent positions of the Sun, Moon, and planets. It is built using the Flask web framework and the Skyfield library for astronomical calculations. The chart is generated as a PNG image using Matplotlib.
 
-The application is designed to be integrated with Home Assistant using a Picture Card entity, but can also function as a standalone service as well.
+The application is designed to be integrated with Home Assistant by setting up a [Generic Camera entity](https://www.home-assistant.io/integrations/generic/) pointing to the image URL and then display on your dashboard using a Picture entity, but can also function as a standalone service as well. Please set the refresh rate to something reasonable, like 0.0033 Hz (every 5 minutes).
 
 If you would rather use my setup directly, you can access it now via https://skyfieldweb.duckdns.org/skychart.png. Make sure to see below for how to customize the URL for your setup.
 
