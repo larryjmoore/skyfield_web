@@ -5,6 +5,7 @@
 
 import datetime
 import math
+from functools import lru_cache
 from pytz import timezone
 from skyfield.api import Loader, Topos
 import matplotlib
@@ -29,11 +30,29 @@ BODIES = [
     ("Neptune", "neptune barycenter", "royalblue", 30),
 ]
 
+@lru_cache(maxsize=128)
+def _get_or_compute_analemmas(lat, lon, tz_name, sun, sky_obj_for_compute):
+    """
+    Computes and returns the analemma paths for a given location.
+    This function is cached to avoid re-computation for the same location.
+    """
+    now = datetime.datetime.now(timezone(tz_name))
+    fixed_offset = now.utcoffset()
+    fixed_tz = datetime.timezone(fixed_offset) if fixed_offset else datetime.timezone.utc
+    
+    analemmas = []
+    for hour in range(24):
+        path = AnalemmaPath(sun, hour, sky_obj_for_compute, fixed_tz, fmt=":", color="gray", linewidth=1, alpha=0.5)
+        if path.is_visible:
+            analemmas.append(path)
+    return analemmas
+
 class Sky:
     def __init__(self, latlong, tzname, show_constellations=True, show_time=True, show_legend=True, show_analemma=True, constellation_list=None, planet_list=None, north_up=False, horizontal_flip=False, image_type="png"):
-        lat, long = latlong
-        self._latlong = Topos(latitude_degrees=lat, longitude_degrees=long)
+        self.lat, self.lon = latlong
+        self._latlong = Topos(latitude_degrees=self.lat, longitude_degrees=self.lon)
         self._timezone = timezone(tzname)
+        self._tzname = tzname
         self._planets = None
         self._ts = None
         self._location = None
@@ -73,8 +92,21 @@ class Sky:
         self._compute_solstice_paths()
         
         if self._show_analemma:
-            self._compute_analemmas()
-            
+            # Create a lightweight Sky-like object for computation context
+            # This avoids having to pass the whole Sky instance into the cache,
+            # which would make the cache key unstable.
+            class SkyContext:
+                def __init__(self, latlong, tz, ts):
+                    self._latlong = latlong
+                    self._timezone = tz
+                    self._ts = ts
+                    self._location = self._planets[EARTH] + self._latlong
+                def compute_position(self, body, obs_datetime):
+                    return Sky.compute_position(self, body, obs_datetime)
+
+            sky_context = SkyContext(self._latlong, self._timezone, self._ts)
+            self._analemmas = _get_or_compute_analemmas(self.lat, self.lon, self._tzname, self._planets[SUN], sky_context)
+
         self._load_points()
         if self._show_constellations:
             self._constellations = constellations.build_constellations(self, self._constellation_names)
@@ -91,17 +123,6 @@ class Sky:
         s_date = datetime.datetime(today.year, 6, 21)
         self._winter_solstice = BodyPath(self._planets[SUN], w_date, self, fmt="--", color="blue", linewidth=1, alpha=0.8)
         self._summer_solstice = BodyPath(self._planets[SUN], s_date, self, fmt="--", color="green", linewidth=1, alpha=0.8)
-
-    def _compute_analemmas(self):
-        now = datetime.datetime.now(self._timezone)
-        fixed_offset = now.utcoffset()
-        fixed_tz = datetime.timezone(fixed_offset) if fixed_offset else datetime.timezone.utc
-
-        self._analemmas = []
-        for hour in range(24):
-            path = AnalemmaPath(self._planets[SUN], hour, self, fixed_tz, fmt=":", color="gray", linewidth=1, alpha=0.5)
-            if path.is_visible:
-                self._analemmas.append(path)
 
     @property
     def get_image_type(self): return self._image_type
