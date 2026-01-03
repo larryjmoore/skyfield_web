@@ -35,36 +35,28 @@ DEFAULT_LON = -111.8910
 DEFAULT_TZ = 'America/Denver' 
 DEFAULT_ELEV = 0
 
-print("Loading planetary data (Global)...")
-load = Loader('data')
-EPH = load('de421.bsp')
-TS = load.timescale()
-print("Skyfield data loaded.")
-
 @app.errorhandler(429)
 def ratelimit_handler(e):
-    # When the rate limit is hit, check which limit was exceeded.
-    
-    # If the graceful "1/minute" limit was hit, serve a cached image.
-    if "minute" in e.description:
-        visitor_ip = get_remote_address()
-        cached_image = cache.get(visitor_ip)
-        if cached_image:
-            response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
-            response.headers.set('X-Cache', 'HIT')
-            return response
-            
-    # For any other limit (like the "1/second" hard limit),
-    # or if there's no cached image, return the error.
+    # Any rate limit hit now means the hard "1/second" limit was exceeded,
+    # so we directly return the "Too Many Requests" error.
     return make_response(f"Too Many Requests: {e.description}", 429)
 
 @app.route('/skychart.png')
 @limiter.limit("1/second") # Hard limit for very fast polling
-@limiter.limit("1/minute") # Graceful limit that uses the cache
 def serve_sky_chart():
     # Because of ProxyFix, request.remote_addr is now the real IP.
     visitor_ip = request.remote_addr
     
+    # Create a cache key from the request arguments
+    cache_key = str(sorted(request.args.items()))
+
+    # Check if a cached image for these exact parameters exists
+    cached_image = cache.get(cache_key)
+    if cached_image:
+        response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
+        response.headers.set('X-Cache', 'HIT')
+        return response
+
     requested_url = request.full_path.strip()
     logging.info(f"{visitor_ip} | {requested_url}")
 
@@ -103,7 +95,7 @@ def serve_sky_chart():
         image_type="png"
     )
 
-    sky.load(ephemeris=EPH, timescale=TS) 
+    sky.load() 
 
     try:
         tz = pytz.timezone(tz_name)
@@ -132,8 +124,8 @@ def serve_sky_chart():
     sky.plot_sky(output=buf, when=when_naive)
     buf.seek(0)
     
-    # Cache the generated image for this IP for 5 minutes
-    cache.set(visitor_ip, buf.getvalue(), timeout=300)
+    # Cache the generated image for this specific set of parameters for 5 minutes
+    cache.set(cache_key, buf.getvalue(), timeout=300)
     
     buf.seek(0)
     response = make_response(send_file(buf, mimetype='image/png'))

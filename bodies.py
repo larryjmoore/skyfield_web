@@ -15,6 +15,13 @@ import constellations
 
 matplotlib.use("agg")
 
+print("Loading planetary data (Global)...")
+load = Loader('data')
+EPH = load('de421.bsp')
+TS = load.timescale()
+print("Skyfield data loaded.")
+
+
 EARTH = "earth"
 SUN = "sun"
 
@@ -31,21 +38,45 @@ BODIES = [
 ]
 
 @lru_cache(maxsize=128)
-def _get_or_compute_analemmas(lat, lon, tz_name, sun, sky_obj_for_compute):
+def _get_or_compute_analemmas(lat, lon, tz_name):
     """
     Computes and returns the analemma paths for a given location.
-    This function is cached to avoid re-computation for the same location.
+    This function is cached to avoid re-computation for the same lat/lon/tz.
     """
-    now = datetime.datetime.now(timezone(tz_name))
+    location = EPH[EARTH] + Topos(latitude_degrees=lat, longitude_degrees=lon)
+    timezone_obj = timezone(tz_name)
+    now = datetime.datetime.now(timezone_obj)
     fixed_offset = now.utcoffset()
     fixed_tz = datetime.timezone(fixed_offset) if fixed_offset else datetime.timezone.utc
     
     analemmas = []
+    # Create a lightweight object to pass context to AnalemmaPath
+    class AnalemmaContext:
+        def get_position(self, body, obs_datetime):
+            return compute_position(location, TS, timezone_obj, body, obs_datetime)
+
+    context = AnalemmaContext()
+
     for hour in range(24):
-        path = AnalemmaPath(sun, hour, sky_obj_for_compute, fixed_tz, fmt=":", color="gray", linewidth=1, alpha=0.5)
+        path = AnalemmaPath(EPH[SUN], hour, context, fixed_tz, fmt=":", color="gray", linewidth=1, alpha=0.5)
         if path.is_visible:
             analemmas.append(path)
     return analemmas
+
+def compute_position(location, timescale, timezone_obj, body, obs_datetime):
+    """Computes the position of a celestial body for a given location and time."""
+    if obs_datetime.tzinfo is None:
+        loc_time = timezone_obj.localize(obs_datetime)
+    else:
+        loc_time = obs_datetime
+
+    obs_time = timescale.utc(loc_time)
+    astrometric = location.at(obs_time).observe(body)
+    alt, azi, _d = astrometric.apparent().altaz()
+    
+    r = 90 - alt.degrees
+    theta = azi.radians
+    return theta, r
 
 class Sky:
     def __init__(self, latlong, tzname, show_constellations=True, show_time=True, show_legend=True, show_analemma=True, constellation_list=None, planet_list=None, north_up=False, horizontal_flip=False, image_type="png"):
@@ -73,39 +104,22 @@ class Sky:
         else: self._constellation_names = constellation_list
         self._planet_list = planet_list
 
-    def load(self, tmpdir=".", ephemeris=None, timescale=None):
+    def load(self):
         if self._planets is None:
-            self._load_sky_data(tmpdir, ephemeris, timescale)
+            self._load_sky_data()
             self._run_initial_computations()
 
-    def _load_sky_data(self, tmpdir, ephemeris, timescale):
-        if ephemeris and timescale:
-            self._planets = ephemeris
-            self._ts = timescale
-        else:
-            load = Loader(tmpdir)
-            self._planets = load("de421.bsp")
-            self._ts = load.timescale()
+    def _load_sky_data(self):
+        # EPH and TS are now loaded globally in this module
+        self._planets = EPH
+        self._ts = TS
 
     def _run_initial_computations(self):
         self._location = self._planets[EARTH] + self._latlong
         self._compute_solstice_paths()
         
         if self._show_analemma:
-            # Create a lightweight Sky-like object for computation context
-            # This avoids having to pass the whole Sky instance into the cache,
-            # which would make the cache key unstable.
-            class SkyContext:
-                def __init__(self, latlong, tz, ts):
-                    self._latlong = latlong
-                    self._timezone = tz
-                    self._ts = ts
-                    self._location = self._planets[EARTH] + self._latlong
-                def compute_position(self, body, obs_datetime):
-                    return Sky.compute_position(self, body, obs_datetime)
-
-            sky_context = SkyContext(self._latlong, self._timezone, self._ts)
-            self._analemmas = _get_or_compute_analemmas(self.lat, self.lon, self._tzname, self._planets[SUN], sky_context)
+            self._analemmas = _get_or_compute_analemmas(self.lat, self.lon, self._tzname)
 
         self._load_points()
         if self._show_constellations:
@@ -127,19 +141,10 @@ class Sky:
     @property
     def get_image_type(self): return self._image_type
 
-    def compute_position(self, body, obs_datetime):
-        if obs_datetime.tzinfo is None:
-            loc_time = self._timezone.localize(obs_datetime)
-        else:
-            loc_time = obs_datetime
+    def get_position(self, body, obs_datetime):
+        # Wrapper to call the standalone compute_position function
+        return compute_position(self._location, self._ts, self._timezone, body, obs_datetime)
 
-        obs_time = self._ts.utc(loc_time)
-        astrometric = self._location.at(obs_time).observe(body)
-        alt, azi, _d = astrometric.apparent().altaz()
-        
-        r = 90 - alt.degrees
-        theta = azi.radians
-        return theta, r
 
     def plot_sky(self, output=None, when=None):
         if when is None: when = datetime.datetime.now()
@@ -193,7 +198,7 @@ class BodyPath(object):
         
         for interval in range(73): 
             now = self._day + delta * interval
-            theta, r = self._sky.compute_position(self._body, now)
+            theta, r = self._sky.get_position(self._body, now)
             if theta is None or r > 90:
                 data.append((np.nan, np.nan))
             else:
@@ -226,7 +231,7 @@ class AnalemmaPath(object):
         for i in range(0, 366, 5): 
             d = start_date + datetime.timedelta(days=i)
             dt = datetime.datetime(d.year, d.month, d.day, self._hour, 0, 0, tzinfo=self._fixed_tz)
-            theta, r = self._sky.compute_position(self._body, dt)
+            theta, r = self._sky.get_position(self._body, dt)
             if r <= 90: 
                 self.is_visible = True
                 data.append((theta, r))
@@ -257,6 +262,6 @@ class Point(object):
         self._sky = sky
 
     def draw(self, ax, when):
-        theta, r = self._sky.compute_position(self._body, when)
+        theta, r = self._sky.get_position(self._body, when)
         if theta is not None and r < 90:
             ax.scatter(theta, r, s=self._size, label=self._label, alpha=1.0, color=self._color, edgecolor="black", zorder=10)

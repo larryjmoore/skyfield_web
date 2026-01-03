@@ -55,8 +55,8 @@ class Constellation(object):
         for (ra1, dec1), (ra2, dec2) in self._radec_pairs:
             star1 = Star(ra_hours=ra1, dec_degrees=dec1)
             star2 = Star(ra_hours=ra2, dec_degrees=dec2)
-            azi1, alt1 = self._sky.compute_position(star1, when)
-            azi2, alt2 = self._sky.compute_position(star2, when)
+            azi1, alt1 = self._sky.get_position(star1, when)
+            azi2, alt2 = self._sky.get_position(star2, when)
             if alt1 > 90 and alt1 > 90:
                 continue
 
