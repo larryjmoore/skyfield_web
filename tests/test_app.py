@@ -1,5 +1,5 @@
 import unittest
-from skyfield_web.app import app
+from app import app
 
 class AppTestCase(unittest.TestCase):
     def setUp(self):

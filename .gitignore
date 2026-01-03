@@ -31,3 +31,6 @@ data/
 
 # Gemini
 GEMINI.md
+
+# Logs
+requests.log

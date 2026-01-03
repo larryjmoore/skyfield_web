@@ -17,7 +17,5 @@ dependencies = [
 [project.scripts]
 skyfield_web = "skyfield_web.app:main"
 
-[tool.setuptools]
-packages = ["skyfield_web"]
-package-dir = {"skyfield_web" = "."}
+
 

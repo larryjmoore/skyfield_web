@@ -35,6 +35,7 @@ print("Loading planetary data (Global)...")
 load = Loader('data')
 EPH = load('de421.bsp')
 TS = load.timescale()
+print("Skyfield data loaded.")
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
@@ -130,4 +131,9 @@ def serve_sky_chart():
     return response
 
 def main():
+    print("Flask app starting...")
     app.run(host='0.0.0.0', port=8000)
+
+if __name__ == '__main__':
+    main()
+
