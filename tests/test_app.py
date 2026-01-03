@@ -1,8 +1,10 @@
 import unittest
-from app import app
+from app import app, limiter
 
 class AppTestCase(unittest.TestCase):
     def setUp(self):
+        app.testing = True  # Enable testing mode for the app
+        limiter.enabled = False # Disable Flask-Limiter for tests
         self.app = app.test_client()
 
     def test_sky_chart_is_generated(self):

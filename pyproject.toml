@@ -12,6 +12,7 @@ dependencies = [
     "pytz",
     "flask-limiter",
     "cachelib",
+    "astral",
 ]
 
 [project.scripts]

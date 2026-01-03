@@ -8,6 +8,9 @@ import math
 from functools import lru_cache
 from pytz import timezone
 from skyfield.api import Loader, Topos
+from skyfield import almanac
+from astral.location import LocationInfo
+from astral.sun import sun as astral_sun, dawn as astral_dawn, dusk as astral_dusk
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -63,6 +66,33 @@ def _get_or_compute_analemmas(lat, lon, tz_name):
             analemmas.append(path)
     return analemmas
 
+@lru_cache(maxsize=256)
+def _get_or_compute_astral_times(lat, lon, tz_name, date_str):
+    """
+    Computes and returns a dictionary of twilight times using the astral library.
+    This function is cached to avoid re-computation.
+    """
+    try:
+        loc = LocationInfo(latitude=lat, longitude=lon, timezone=tz_name)
+        d = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        s = astral_sun(loc.observer, date=d, tzinfo=loc.timezone)
+
+        return {
+            'astronomical_dawn': astral_dawn(loc.observer, date=d, depression=18, tzinfo=loc.timezone).strftime('%H:%M'),
+            'nautical_dawn': astral_dawn(loc.observer, date=d, depression=12, tzinfo=loc.timezone).strftime('%H:%M'),
+            'civil_dawn': s['dawn'].strftime('%H:%M'),
+            'sunrise': s['sunrise'].strftime('%H:%M'),
+            'solar_noon': s['noon'].strftime('%H:%M'),
+            'sunset': s['sunset'].strftime('%H:%M'),
+            'civil_dusk': s['dusk'].strftime('%H:%M'),
+            'nautical_dusk': astral_dusk(loc.observer, date=d, depression=12, tzinfo=loc.timezone).strftime('%H:%M'),
+            'astronomical_dusk': astral_dusk(loc.observer, date=d, depression=18, tzinfo=loc.timezone).strftime('%H:%M'),
+        }
+    except (ValueError, KeyError): # Astral can raise ValueError for polar nights/days or KeyError if an event doesn't occur
+        return {k: "N/A" for k in ['astronomical_dawn', 'nautical_dawn', 'civil_dawn', 'sunrise', 'solar_noon', 'sunset', 'civil_dusk', 'nautical_dusk', 'astronomical_dusk']}
+
+
 def compute_position(location, timescale, timezone_obj, body, obs_datetime):
     """Computes the position of a celestial body for a given location and time."""
     if obs_datetime.tzinfo is None:
@@ -100,6 +130,13 @@ class Sky:
         self._north_up = north_up
         self._horizontal_flip = horizontal_flip
         self._image_type = image_type
+        self._times = {}
+        # Moon info
+        self._moon_rise = "N/A"
+        self._moon_set = "N/A"
+        self._moon_phase_name = ""
+        self._moon_illumination = 0
+        
         if constellation_list is None: self._constellation_names = constellations.DEFAULT_CONSTELLATIONS
         else: self._constellation_names = constellation_list
         self._planet_list = planet_list
@@ -138,6 +175,34 @@ class Sky:
         self._winter_solstice = BodyPath(self._planets[SUN], w_date, self, fmt="--", color="blue", linewidth=1, alpha=0.8)
         self._summer_solstice = BodyPath(self._planets[SUN], s_date, self, fmt="--", color="green", linewidth=1, alpha=0.8)
 
+    def _compute_moon_times(self, when):
+        """Calculates moon rise, set, and phase for the given date."""
+        start_time = self._ts.utc(when.year, when.month, when.day, 0)
+        end_time = self._ts.utc(when.year, when.month, when.day, 24)
+
+        # Moon Rise/Set
+        f = almanac.risings_and_settings(self._planets, self._planets['moon'], self._latlong)
+        times, events = almanac.find_discrete(start_time, end_time, f)
+        for t, event in zip(times, events):
+            if event: self._moon_rise = t.astimezone(self._timezone).strftime('%H:%M')
+            else: self._moon_set = t.astimezone(self._timezone).strftime('%H:%M')
+        
+        # Moon Phase
+        t = self._ts.utc(when)
+        moon_phase_angle = almanac.moon_phase(self._planets, t).degrees
+        self._moon_illumination = almanac.fraction_illuminated(self._planets, 'moon', t) * 100
+        
+        if moon_phase_angle < 7 or moon_phase_angle >= 353: self._moon_phase_name = "New Moon"
+        elif 7 <= moon_phase_angle < 83: self._moon_phase_name = "Waxing Crescent"
+        elif 83 <= moon_phase_angle < 97: self._moon_phase_name = "First Quarter"
+        elif 97 <= moon_phase_angle < 173: self._moon_phase_name = "Waxing Gibbous"
+        elif 173 <= moon_phase_angle < 187: self._moon_phase_name = "Full Moon"
+        elif 187 <= moon_phase_angle < 263: self._moon_phase_name = "Waning Gibbous"
+        elif 263 <= moon_phase_angle < 277: self._moon_phase_name = "Last Quarter"
+        elif 277 <= moon_phase_angle < 353: self._moon_phase_name = "Waning Crescent"
+        else: self._moon_phase_name = "N/A" # Should not happen
+
+
     @property
     def get_image_type(self): return self._image_type
 
@@ -148,6 +213,14 @@ class Sky:
 
     def plot_sky(self, output=None, when=None):
         if when is None: when = datetime.datetime.now()
+        
+        # Get twilight times from the new cached astral function
+        date_str = when.strftime('%Y-%m-%d')
+        self._times = _get_or_compute_astral_times(self.lat, self.lon, self._tzname, date_str)
+        
+        # Get moon times
+        self._compute_moon_times(when)
+
         visible = [np.linspace(0, 2 * np.pi, 200), [90.0 for _i in range(200)]]
         
         fig, ax = plt.subplots(1, 1, figsize=(6, 6.2), subplot_kw={"projection": "polar"})
@@ -156,10 +229,82 @@ class Sky:
         
         ax.plot(*visible, "-", color="k", linewidth=3, alpha=1.0)
         self._draw_objects(ax, when)
+
+        # --- Add Text Information ---
+
+        # Next Solar Event
+        next_event_str = "Next Event: N/A"
+        try:
+            now_aware = self._timezone.localize(when) if when.tzinfo is None else when
+            sr_str = self._times.get('sunrise')
+            sn_str = self._times.get('solar_noon')
+            ss_str = self._times.get('sunset')
+
+            events_today = []
+            if sr_str != "N/A": events_today.append(("Sunrise", datetime.datetime.strptime(f"{date_str} {sr_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+            if sn_str != "N/A": events_today.append(("Solar Noon", datetime.datetime.strptime(f"{date_str} {sn_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+            if ss_str != "N/A": events_today.append(("Sunset", datetime.datetime.strptime(f"{date_str} {ss_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+
+            next_event = None
+            for name, event_time in sorted(events_today, key=lambda x: x[1]):
+                if event_time > now_aware:
+                    next_event = (name, event_time)
+                    break
+            
+            if next_event is None: # Must be tomorrow's sunrise
+                tomorrow_str = (when + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                tmrw_times = _get_or_compute_astral_times(self.lat, self.lon, self._tzname, tomorrow_str)
+                sr_str_tmrw = tmrw_times.get('sunrise')
+                if sr_str_tmrw != "N/A":
+                    sr_time_tmrw = datetime.datetime.strptime(f"{tomorrow_str} {sr_str_tmrw}", '%Y-%m-%d %H:%M').astimezone(self._timezone)
+                    next_event = ("Sunrise", sr_time_tmrw)
+
+            if next_event:
+                delta = next_event[1] - now_aware
+                hours, remainder = divmod(delta.total_seconds(), 3600)
+                minutes, _ = divmod(remainder, 60)
+                next_event_str = f"Time to {next_event[0]}: {int(hours)}h {int(minutes)}m"
+        except (ValueError, TypeError):
+            next_event_str = "Next Event: Error"
+
+
+        # Twilight & Sun Times
+        dawn_times = (
+            f"Astro Dawn: {self._times.get('astronomical_dawn', 'N/A')}\n"
+            f"Naut Dawn:  {self._times.get('nautical_dawn', 'N/A')}\n"
+            f"Civil Dawn: {self._times.get('civil_dawn', 'N/A')}\n"
+            f"Sunrise:    {self._times.get('sunrise', 'N/A')}"
+        )
+        dusk_times = (
+            f"Sunset:      {self._times.get('sunset', 'N/A')}\n"
+            f"Civil Dusk:  {self._times.get('civil_dusk', 'N/A')}\n"
+            f"Naut Dusk:   {self._times.get('nautical_dusk', 'N/A')}\n"
+            f"Astro Dusk:  {self._times.get('astronomical_dusk', 'N/A')}"
+        )
         
-        if self._show_time:
-            ax.annotate(str(when), xy=(0.09, 0.07), xycoords="figure fraction", horizontalalignment="left", verticalalignment="top", fontsize=8)
-            ax.annotate(f"Lat: {self._latlong.latitude.degrees:.2f}, Lon: {self._latlong.longitude.degrees:.2f}", xy=(0.09, 0.05), xycoords="figure fraction", horizontalalignment="left", verticalalignment="top", fontsize=8)
+        # Center Info
+        center_text = (
+            f"{when.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"Solar Noon: {self._times.get('solar_noon', 'N/A')}\n"
+            f"{next_event_str}"
+        )
+
+        fig.text(0.01, 0.99, dawn_times, transform=fig.transFigure, fontsize=7,
+                 verticalalignment='top', horizontalalignment='left', fontname='monospace')
+        fig.text(0.99, 0.99, dusk_times, transform=fig.transFigure, fontsize=7,
+                 verticalalignment='top', horizontalalignment='right', fontname='monospace')
+        fig.text(0.5, 0.99, center_text, transform=fig.transFigure, fontsize=7,
+                 verticalalignment='top', horizontalalignment='center', fontname='monospace')
+
+        # Moon Info
+        moon_info = (
+            f"Moon Rise: {self._moon_rise}\n"
+            f"Moon Set:  {self._moon_set}\n"
+            f"Phase: {self._moon_phase_name} ({self._moon_illumination:.1f}%)"
+        )
+        fig.text(0.01, 0.1, moon_info, transform=fig.transFigure, fontsize=7,
+                 verticalalignment='top', horizontalalignment='left', fontname='monospace')
+
         if self._show_legend:
             fig.legend(loc="lower right", bbox_transform=fig.transFigure, ncol=3, markerscale=0.6, columnspacing=1, mode=None, handletextpad=0.05)
             
@@ -168,14 +313,14 @@ class Sky:
         ax.set_rgrids(np.linspace(0, 90, 10), [f"{int(f)}˚" for f in np.linspace(90, 0, 10)])
         ax.set_thetagrids(np.linspace(0, 360.0, 9), ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"])
         
-        fig.tight_layout()
+        fig.tight_layout(rect=[0, 0.05, 1, 0.95]) # Adjust layout to prevent text overlap
         if output is None: plt.show()
         else: fig.savefig(output, format=self._image_type, bbox_inches='tight', pad_inches=0.05)
         plt.close()
 
     def _draw_objects(self, ax, when):
         for analemma in self._analemmas: analemma.draw(ax)
-        today_sunpath = BodyPath(self._planets[SUN], datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0), self, "-", color="k", linewidth=1, alpha=0.8)
+        today_sunpath = BodyPath(self._planets[SUN], datetime.datetime.now(self._timezone).replace(hour=0, minute=0, second=0, microsecond=0), self, "-", color="k", linewidth=1, alpha=0.8)
         for sunpath in [self._winter_solstice, self._summer_solstice, today_sunpath]: sunpath.draw(ax)
         for point in self._points: point.draw(ax, when)
         for constellation in self._constellations: constellation.draw(ax, when)

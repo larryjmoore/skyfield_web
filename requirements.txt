@@ -4,3 +4,4 @@ matplotlib
 pytz
 flask-limiter
 cachelib
+astral

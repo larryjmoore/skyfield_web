@@ -121,7 +121,7 @@ def serve_sky_chart():
     when_naive = when_aware.replace(tzinfo=None)
     
     buf = io.BytesIO()
-    sky.plot_sky(output=buf, when=when_naive)
+    sky.plot_sky(output=buf, when=when_aware)
     buf.seek(0)
     
     # Cache the generated image for this specific set of parameters for 5 minutes
