@@ -80,7 +80,7 @@ def serve_sky_chart():
     north_up = is_true('north_up', False)
     show_time = is_true('show_time', True)
     show_legend = is_true('show_legend', True)
-    show_stats = is_true('show_stats', True) # New parameter
+    show_stats = is_true('show_stats', True)
     
     planet_filter = None if show_planets else []
 

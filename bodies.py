@@ -178,17 +178,40 @@ class Sky:
 
     def _compute_moon_times(self, when):
         """Calculates moon rise, set, and phase for the given date."""
-        start_time = self._ts.utc(when.year, when.month, when.day, 0)
-        end_time = self._ts.utc(when.year, when.month, when.day, 24)
+        # Define search window for today (midnight to 23:59:59 local time)
+        # 'when' is already timezone-aware at this point
+        local_midnight = when.replace(hour=0, minute=0, second=0, microsecond=0)
+        local_end_of_day = when.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        # Moon Rise/Set
+        start_search = self._ts.utc(local_midnight)
+        end_search = self._ts.utc(local_end_of_day)
+
         f = almanac.risings_and_settings(self._planets, self._planets['moon'], self._latlong)
-        times, events = almanac.find_discrete(start_time, end_time, f)
-        for t, event in zip(times, events):
-            if event: self._moon_rise = t.astimezone(self._timezone).strftime('%H:%M')
-            else: self._moon_set = t.astimezone(self._timezone).strftime('%H:%M')
+        times, events = almanac.find_discrete(start_search, end_search, f)
         
-        # Moon Phase
+        moon_rises_today = []
+        moon_sets_today = []
+        for t, event in zip(times, events):
+            local_time = t.astimezone(self._timezone)
+            # Ensure event falls within the desired local day (midnight to 23:59:59)
+            if local_midnight.date() == local_time.date():
+                if event: # True for rising
+                    moon_rises_today.append(local_time)
+                else: # False for setting
+                    moon_sets_today.append(local_time)
+
+        # Sort and pick the first for the day
+        if moon_rises_today:
+            self._moon_rise = sorted(moon_rises_today)[0].strftime('%H:%M')
+        else:
+            self._moon_rise = "N/A"
+
+        if moon_sets_today:
+            self._moon_set = sorted(moon_sets_today)[0].strftime('%H:%M')
+        else:
+            self._moon_set = "N/A"
+
+        # Moon Phase (remains the same)
         t = self._ts.utc(when)
         moon_phase_angle = almanac.moon_phase(self._planets, t).degrees
         self._moon_illumination = almanac.fraction_illuminated(self._planets, 'moon', t) * 100
@@ -235,7 +258,7 @@ class Sky:
 
         # Mandatory time/date on top center
         if self._show_time:
-            fig.text(0.5, 0.99, when.strftime('%Y-%m-%d %H:%M:%S %Z'), transform=fig.transFigure, fontsize=9,
+            fig.text(0.5, 0.99, when.strftime('%b %-d %Y, %H:%M %Z'), transform=fig.transFigure, fontsize=9,
                      verticalalignment='top', horizontalalignment='center', fontname='monospace')
 
         if self._show_stats:
@@ -303,11 +326,26 @@ class Sky:
                      verticalalignment='top', horizontalalignment='center', fontname='monospace')
 
             # Moon Info
-            moon_info = (
-                f"Moon Rise: {self._moon_rise}\n"
-                f"Moon Set:  {self._moon_set}\n"
-                f"Phase: {self._moon_phase_name} ({self._moon_illumination:.1f}%)"
-            )
+            moon_events_text = []
+            moon_events = []
+            if self._moon_rise != "N/A":
+                # Need a dummy date to parse time string for comparison
+                dummy_date = datetime.datetime.now().date()
+                moon_events.append((datetime.datetime.strptime(f"{dummy_date} {self._moon_rise}", '%Y-%m-%d %H:%M'), f"Moon Rise: {self._moon_rise}"))
+            if self._moon_set != "N/A":
+                dummy_date = datetime.datetime.now().date()
+                moon_events.append((datetime.datetime.strptime(f"{dummy_date} {self._moon_set}", '%Y-%m-%d %H:%M'), f"Moon Set:  {self._moon_set}"))
+
+            if moon_events:
+                moon_events.sort(key=lambda x: x[0])
+                for _, text in moon_events:
+                    moon_events_text.append(text)
+            else:
+                moon_events_text.append("Moon Rise: N/A")
+                moon_events_text.append("Moon Set:  N/A")
+
+            moon_info = "\n".join(moon_events_text) + \
+                        f"\nPhase: {self._moon_phase_name} ({self._moon_illumination:.1f}%)"
             fig.text(0.01, 0.1, moon_info, transform=fig.transFigure, fontsize=7,
                      verticalalignment='top', horizontalalignment='left', fontname='monospace')
         
