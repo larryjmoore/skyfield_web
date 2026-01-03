@@ -1,6 +1,7 @@
 # Skyfield Web Application
 
 ![Sample Sky Chart](images/skychart_sample.png)
+![Sample Sky Chart Dark Mode](images/skychart_sample_dark.png)
 
 This project is a Python-based web application that generates a sky chart image showing the apparent positions of the Sun, Moon, and planets. It is built using the Flask web framework and the Skyfield library for astronomical calculations. The chart is generated as a PNG image using Matplotlib.
 
@@ -96,6 +97,7 @@ You can customize the chart by providing query parameters:
 *   `show_time`: `true` or `false` (default: `true`)
 *   `show_legend`: `true` or `false` (default: `true`)
 *   `show_stats`: `true` or `false` (default: `true`) - Shows/hides all extra statistics (twilight, solar noon, next event, moon info).
+*   `dark_mode`: `true` or `false` (default: `false`)
 
 Optional overrides to force a specific day and time:
 

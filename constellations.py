@@ -39,6 +39,9 @@ class Constellation(object):
         self.name = name
         self._radec_pairs = radec_pairs
         self._sky = sky
+        self._line_color = sky.COLOR_MAP.get("k", "k") if sky._dark_mode else "k"
+        self._point_color = sky.COLOR_MAP.get("black", "black") if sky._dark_mode else "black"
+
 
     def draw(self, ax, when):
         """
@@ -66,8 +69,8 @@ class Constellation(object):
                     alt1,
                     s=10,
                     alpha=0.1,
-                    color="black",
-                    edgecolor="black",
+                    color=self._point_color,
+                    edgecolor=self._point_color,
                 )
                 plotted.append((azi1, alt1))
 
@@ -77,8 +80,8 @@ class Constellation(object):
                     alt2,
                     s=10,
                     alpha=0.1,
-                    color="black",
-                    edgecolor="black",
+                    color=self._point_color,
+                    edgecolor=self._point_color,
                 )
                 plotted.append((azi2, alt2))
 
@@ -90,7 +93,7 @@ class Constellation(object):
                 np.linspace(azi1, azi2, 10),
                 np.linspace(alt1, alt2, 10),
                 "-",
-                color="k",
+                color=self._line_color,
                 linewidth=1,
                 alpha=0.1,
             )
