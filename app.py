@@ -1,12 +1,23 @@
 import io
 import datetime
 import logging
-from flask import Flask, send_file, request
+from flask import Flask, send_file, request, make_response
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from cachelib import SimpleCache
 import pytz
 from skyfield.api import Loader
 import bodies
 
 app = Flask(__name__)
+cache = SimpleCache()
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 
 logging.basicConfig(
     filename='requests.log', 
@@ -25,11 +36,20 @@ load = Loader('data')
 EPH = load('de421.bsp')
 TS = load.timescale()
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    visitor_ip = get_remote_address()
+    cached_image = cache.get(visitor_ip)
+    if cached_image:
+        response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
+        response.headers.set('X-Cache', 'HIT')
+        return response
+    return make_response("Too Many Requests", 429)
+
 @app.route('/skychart.png')
+@limiter.limit("1/minute")
 def serve_sky_chart():
     if request.headers.getlist("X-Forwarded-For"):
-        # The header often looks like "ClientIP, Proxy1, Proxy2"
-        # We want the first one.
         visitor_ip = request.headers.getlist("X-Forwarded-For")[0].split(',')[0]
     else:
         visitor_ip = request.remote_addr
@@ -101,7 +121,13 @@ def serve_sky_chart():
     sky.plot_sky(output=buf, when=when_naive)
     buf.seek(0)
     
-    return send_file(buf, mimetype='image/png')
+    # Cache the generated image for this IP for 5 minutes
+    cache.set(visitor_ip, buf.getvalue(), timeout=300)
+    
+    buf.seek(0)
+    response = make_response(send_file(buf, mimetype='image/png'))
+    response.headers.set('X-Cache', 'MISS')
+    return response
 
 def main():
     app.run(host='0.0.0.0', port=8000)

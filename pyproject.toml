@@ -10,6 +10,8 @@ dependencies = [
     "skyfield",
     "matplotlib",
     "pytz",
+    "flask-limiter",
+    "cachelib",
 ]
 
 [project.scripts]
@@ -17,3 +19,5 @@ skyfield_web = "skyfield_web.app:main"
 
 [tool.setuptools]
 packages = ["skyfield_web"]
+package-dir = {"skyfield_web" = "."}
+
