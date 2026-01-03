@@ -1,6 +1,6 @@
 # Skyfield Web Application
 
-![Sample Sky Chart](images/sky_chart_sample.png)
+![Sample Sky Chart](images/skychart_sample.png)
 
 This project is a Python-based web application that generates a sky chart image showing the apparent positions of the Sun, Moon, and planets. It is built using the Flask web framework and the Skyfield library for astronomical calculations. The chart is generated as a PNG image using Matplotlib.
 
