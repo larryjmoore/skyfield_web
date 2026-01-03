@@ -17,12 +17,11 @@ If you would rather use my setup directly, you can access it now via https://sky
 
 ## Project Structure
 
-*   `skyfield_web/`: The main Python package containing the application source code.
-    *   `__init__.py`: Package initialization.
-    *   `app.py`: The main Flask application.
-    *   `bodies.py`: Contains logic for celestial body calculations and plotting.
-    *   `constellations.py`: Handles drawing constellations.
-    *   `__main__.py`: Allows the package to be run as a module.
+*   `__init__.py`: Package initialization.
+*   `app.py`: The main Flask application.
+*   `bodies.py`: Contains logic for celestial body calculations and plotting.
+*   `constellations.py`: Handles drawing constellations.
+*   `__main__.py`: Allows the package to be run as a module.
 *   `data/`: Directory for astronomical data files (e.g., `de421.bsp`).
 *   `tests/`: Directory for unit and integration tests.
 *   `venv/`: Python virtual environment.
@@ -96,6 +95,7 @@ You can customize the chart by providing query parameters:
 *   `north_up`: `true` or `false` (default: `false`)
 *   `show_time`: `true` or `false` (default: `true`)
 *   `show_legend`: `true` or `false` (default: `true`)
+*   `show_stats`: `true` or `false` (default: `true`) - Shows/hides all extra statistics (twilight, solar noon, next event, moon info).
 
 Optional overrides to force a specific day and time:
 

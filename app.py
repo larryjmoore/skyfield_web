@@ -80,6 +80,7 @@ def serve_sky_chart():
     north_up = is_true('north_up', False)
     show_time = is_true('show_time', True)
     show_legend = is_true('show_legend', True)
+    show_stats = is_true('show_stats', True) # New parameter
     
     planet_filter = None if show_planets else []
 
@@ -92,7 +93,8 @@ def serve_sky_chart():
         show_time=show_time,
         show_legend=show_legend,
         north_up=north_up,
-        image_type="png"
+        image_type="png",
+        show_stats=show_stats # Pass new parameter
     )
 
     sky.load() 

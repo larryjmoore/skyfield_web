@@ -109,7 +109,7 @@ def compute_position(location, timescale, timezone_obj, body, obs_datetime):
     return theta, r
 
 class Sky:
-    def __init__(self, latlong, tzname, show_constellations=True, show_time=True, show_legend=True, show_analemma=True, constellation_list=None, planet_list=None, north_up=False, horizontal_flip=False, image_type="png"):
+    def __init__(self, latlong, tzname, show_constellations=True, show_time=True, show_legend=True, show_analemma=True, constellation_list=None, planet_list=None, north_up=False, horizontal_flip=False, image_type="png", show_stats=True):
         self.lat, self.lon = latlong
         self._latlong = Topos(latitude_degrees=self.lat, longitude_degrees=self.lon)
         self._timezone = timezone(tzname)
@@ -136,6 +136,7 @@ class Sky:
         self._moon_set = "N/A"
         self._moon_phase_name = ""
         self._moon_illumination = 0
+        self._show_stats = show_stats # Store new parameter
         
         if constellation_list is None: self._constellation_names = constellations.DEFAULT_CONSTELLATIONS
         else: self._constellation_names = constellation_list
@@ -232,79 +233,84 @@ class Sky:
 
         # --- Add Text Information ---
 
-        # Next Solar Event
-        next_event_str = "Next Event: N/A"
-        try:
-            now_aware = self._timezone.localize(when) if when.tzinfo is None else when
-            sr_str = self._times.get('sunrise')
-            sn_str = self._times.get('solar_noon')
-            ss_str = self._times.get('sunset')
+        # Mandatory time/date on top center
+        if self._show_time:
+            fig.text(0.5, 0.99, when.strftime('%Y-%m-%d %H:%M:%S %Z'), transform=fig.transFigure, fontsize=9,
+                     verticalalignment='top', horizontalalignment='center', fontname='monospace')
 
-            events_today = []
-            if sr_str != "N/A": events_today.append(("Sunrise", datetime.datetime.strptime(f"{date_str} {sr_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
-            if sn_str != "N/A": events_today.append(("Solar Noon", datetime.datetime.strptime(f"{date_str} {sn_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
-            if ss_str != "N/A": events_today.append(("Sunset", datetime.datetime.strptime(f"{date_str} {ss_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+        if self._show_stats:
+            # Next Solar Event
+            next_event_str = "Next Event: N/A"
+            try:
+                now_aware = self._timezone.localize(when) if when.tzinfo is None else when
+                sr_str = self._times.get('sunrise')
+                sn_str = self._times.get('solar_noon')
+                ss_str = self._times.get('sunset')
 
-            next_event = None
-            for name, event_time in sorted(events_today, key=lambda x: x[1]):
-                if event_time > now_aware:
-                    next_event = (name, event_time)
-                    break
+                events_today = []
+                if sr_str != "N/A": events_today.append(("Sunrise", datetime.datetime.strptime(f"{date_str} {sr_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+                if sn_str != "N/A": events_today.append(("Solar Noon", datetime.datetime.strptime(f"{date_str} {sn_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+                if ss_str != "N/A": events_today.append(("Sunset", datetime.datetime.strptime(f"{date_str} {ss_str}", '%Y-%m-%d %H:%M').astimezone(self._timezone)))
+
+                next_event = None
+                for name, event_time in sorted(events_today, key=lambda x: x[1]):
+                    if event_time > now_aware:
+                        next_event = (name, event_time)
+                        break
+                
+                if next_event is None: # Must be tomorrow's sunrise
+                    tomorrow_str = (when + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                    tmrw_times = _get_or_compute_astral_times(self.lat, self.lon, self._tzname, tomorrow_str)
+                    sr_str_tmrw = tmrw_times.get('sunrise')
+                    if sr_str_tmrw != "N/A":
+                        sr_time_tmrw = datetime.datetime.strptime(f"{tomorrow_str} {sr_str_tmrw}", '%Y-%m-%d %H:%M').astimezone(self._timezone)
+                        next_event = ("Sunrise", sr_time_tmrw)
+
+                if next_event:
+                    delta = next_event[1] - now_aware
+                    hours, remainder = divmod(delta.total_seconds(), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    next_event_str = f"Time to {next_event[0]}: {int(hours)}h {int(minutes)}m"
+            except (ValueError, TypeError):
+                next_event_str = "Next Event: Error"
+
+
+            # Twilight & Sun Times
+            dawn_times = (
+                f"Astro Dawn: {self._times.get('astronomical_dawn', 'N/A')}\n"
+                f"Naut Dawn:  {self._times.get('nautical_dawn', 'N/A')}\n"
+                f"Civil Dawn: {self._times.get('civil_dawn', 'N/A')}\n"
+                f"Sunrise:    {self._times.get('sunrise', 'N/A')}"
+            )
+            dusk_times = (
+                f"Sunset:      {self._times.get('sunset', 'N/A')}\n"
+                f"Civil Dusk:  {self._times.get('civil_dusk', 'N/A')}\n"
+                f"Naut Dusk:   {self._times.get('nautical_dusk', 'N/A')}\n"
+                f"Astro Dusk:  {self._times.get('astronomical_dusk', 'N/A')}"
+            )
             
-            if next_event is None: # Must be tomorrow's sunrise
-                tomorrow_str = (when + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-                tmrw_times = _get_or_compute_astral_times(self.lat, self.lon, self._tzname, tomorrow_str)
-                sr_str_tmrw = tmrw_times.get('sunrise')
-                if sr_str_tmrw != "N/A":
-                    sr_time_tmrw = datetime.datetime.strptime(f"{tomorrow_str} {sr_str_tmrw}", '%Y-%m-%d %H:%M').astimezone(self._timezone)
-                    next_event = ("Sunrise", sr_time_tmrw)
+            # Center Info (below current time)
+            center_stats_text = (
+                f"Solar Noon: {self._times.get('solar_noon', 'N/A')}\n"
+                f"{next_event_str}"
+            )
 
-            if next_event:
-                delta = next_event[1] - now_aware
-                hours, remainder = divmod(delta.total_seconds(), 3600)
-                minutes, _ = divmod(remainder, 60)
-                next_event_str = f"Time to {next_event[0]}: {int(hours)}h {int(minutes)}m"
-        except (ValueError, TypeError):
-            next_event_str = "Next Event: Error"
+            fig.text(0.01, 0.99, dawn_times, transform=fig.transFigure, fontsize=7,
+                     verticalalignment='top', horizontalalignment='left', fontname='monospace')
+            fig.text(0.99, 0.99, dusk_times, transform=fig.transFigure, fontsize=7,
+                     verticalalignment='top', horizontalalignment='right', fontname='monospace')
+            fig.text(0.5, 0.97, center_stats_text, transform=fig.transFigure, fontsize=7, # Lowered y-position
+                     verticalalignment='top', horizontalalignment='center', fontname='monospace')
 
-
-        # Twilight & Sun Times
-        dawn_times = (
-            f"Astro Dawn: {self._times.get('astronomical_dawn', 'N/A')}\n"
-            f"Naut Dawn:  {self._times.get('nautical_dawn', 'N/A')}\n"
-            f"Civil Dawn: {self._times.get('civil_dawn', 'N/A')}\n"
-            f"Sunrise:    {self._times.get('sunrise', 'N/A')}"
-        )
-        dusk_times = (
-            f"Sunset:      {self._times.get('sunset', 'N/A')}\n"
-            f"Civil Dusk:  {self._times.get('civil_dusk', 'N/A')}\n"
-            f"Naut Dusk:   {self._times.get('nautical_dusk', 'N/A')}\n"
-            f"Astro Dusk:  {self._times.get('astronomical_dusk', 'N/A')}"
-        )
+            # Moon Info
+            moon_info = (
+                f"Moon Rise: {self._moon_rise}\n"
+                f"Moon Set:  {self._moon_set}\n"
+                f"Phase: {self._moon_phase_name} ({self._moon_illumination:.1f}%)"
+            )
+            fig.text(0.01, 0.1, moon_info, transform=fig.transFigure, fontsize=7,
+                     verticalalignment='top', horizontalalignment='left', fontname='monospace')
         
-        # Center Info
-        center_text = (
-            f"{when.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-            f"Solar Noon: {self._times.get('solar_noon', 'N/A')}\n"
-            f"{next_event_str}"
-        )
-
-        fig.text(0.01, 0.99, dawn_times, transform=fig.transFigure, fontsize=7,
-                 verticalalignment='top', horizontalalignment='left', fontname='monospace')
-        fig.text(0.99, 0.99, dusk_times, transform=fig.transFigure, fontsize=7,
-                 verticalalignment='top', horizontalalignment='right', fontname='monospace')
-        fig.text(0.5, 0.99, center_text, transform=fig.transFigure, fontsize=7,
-                 verticalalignment='top', horizontalalignment='center', fontname='monospace')
-
-        # Moon Info
-        moon_info = (
-            f"Moon Rise: {self._moon_rise}\n"
-            f"Moon Set:  {self._moon_set}\n"
-            f"Phase: {self._moon_phase_name} ({self._moon_illumination:.1f}%)"
-        )
-        fig.text(0.01, 0.1, moon_info, transform=fig.transFigure, fontsize=7,
-                 verticalalignment='top', horizontalalignment='left', fontname='monospace')
-
         if self._show_legend:
             fig.legend(loc="lower right", bbox_transform=fig.transFigure, ncol=3, markerscale=0.6, columnspacing=1, mode=None, handletextpad=0.05)
             
