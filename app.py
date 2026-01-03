@@ -7,9 +7,13 @@ from flask_limiter.util import get_remote_address
 from cachelib import SimpleCache
 import pytz
 from skyfield.api import Loader
+from werkzeug.middleware.proxy_fix import ProxyFix
 import bodies
 
 app = Flask(__name__)
+# Fix for running behind a proxy like Gunicorn
+# It will trust the X-Forwarded-For header.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 cache = SimpleCache()
 
 limiter = Limiter(
@@ -39,21 +43,27 @@ print("Skyfield data loaded.")
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
-    visitor_ip = get_remote_address()
-    cached_image = cache.get(visitor_ip)
-    if cached_image:
-        response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
-        response.headers.set('X-Cache', 'HIT')
-        return response
-    return make_response("Too Many Requests", 429)
+    # When the rate limit is hit, check which limit was exceeded.
+    
+    # If the graceful "1/minute" limit was hit, serve a cached image.
+    if "minute" in e.description:
+        visitor_ip = get_remote_address()
+        cached_image = cache.get(visitor_ip)
+        if cached_image:
+            response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
+            response.headers.set('X-Cache', 'HIT')
+            return response
+            
+    # For any other limit (like the "1/second" hard limit),
+    # or if there's no cached image, return the error.
+    return make_response(f"Too Many Requests: {e.description}", 429)
 
 @app.route('/skychart.png')
-@limiter.limit("1/minute")
+@limiter.limit("1/second") # Hard limit for very fast polling
+@limiter.limit("1/minute") # Graceful limit that uses the cache
 def serve_sky_chart():
-    if request.headers.getlist("X-Forwarded-For"):
-        visitor_ip = request.headers.getlist("X-Forwarded-For")[0].split(',')[0]
-    else:
-        visitor_ip = request.remote_addr
+    # Because of ProxyFix, request.remote_addr is now the real IP.
+    visitor_ip = request.remote_addr
     
     requested_url = request.full_path.strip()
     logging.info(f"{visitor_ip} | {requested_url}")
