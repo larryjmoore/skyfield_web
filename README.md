@@ -26,6 +26,7 @@ https://skyfieldweb.duckdns.org/skychart.png?
 *   Generates sky charts as PNG images.
 *   Customizable with latitude, longitude, elevation, and GMT offset.
 *   Option to show analemma, constellations, and planets.
+*   Flexible date and time input.
 
 ## Project Structure
 
@@ -37,7 +38,6 @@ https://skyfieldweb.duckdns.org/skychart.png?
 *   `data/`: Directory for astronomical data files (e.g., `de421.bsp`).
 *   `tests/`: Directory for unit and integration tests.
 *   `venv/`: Python virtual environment.
-*   `pyproject.toml`: Project metadata and dependencies.
 *   `requirements.txt`: Python dependency list.
 *   `LICENSE`: Project license.
 *   `.gitignore`: Specifies files and directories to be ignored by Git.
@@ -99,6 +99,11 @@ You can customize the chart by providing query parameters:
 *   `lon`: Longitude (e.g., `-118.2437`)
 *   `elevation`: Elevation in meters (e.g., `1447`)
 *   `gmt_offset`: GMT offset in hours (e.g., `-7`, `5.5`, `5:30`, `-0700`, or `0530`)
+*   `when`: A specific date and time override to generate the chart for. Accepts a variety of formats, including:
+    *   `YYYY-MM-DD` (e.g., `2026-01-15`)
+    *   `YYYY-MM-DD_HH:MM` (e.g., `2026-01-15_14:30`)
+    *   `YYYY-MM-DD_HH:MM:SS` (e.g., `2026-01-15_14:30:00`)
+    *   `YYYY-M-D` (e.g., `2026-1-1`)
 *   `show_analemma`: `true` or `false` (default: `false`)
 *   `show_constellation`: `true` or `false` (default: `false`)
 *   `show_planets`: `true` or `false` (default: `true`)
@@ -108,22 +113,18 @@ You can customize the chart by providing query parameters:
 *   `show_stats`: `true` or `false` (default: `true`) - Shows/hides all extra statistics (twilight, solar noon, next event, moon info).
 *   `dark_mode`: `true` or `false` (default: `false`)
 
-Optional overrides to force a specific day and time:
-
-*   `year`: Year (e.g., `2026`)
-*   `month`: Month (e.g., `1` for January)
-*   `day`: Day (e.g., `15`)
-*   `hour`: Hour (24-hour format, e.g., `14` for 2 PM)
-*   `minute`: Minute (e.g., `30`)
-*   `second`: Second (e.g., `0`)
-
-    *Note: All of the `year`, `month`, `day`, `hour`, `minute`, and `second` parameters
-must be provided for the custom time to be applied. Otherwise, the current time will be used.* 
-
 Example:
 
 ```
 http://localhost:8000/skychart.png?lat=34.1&lon=-118.2&gmt_offset=-7&show_constellation=true
+```
+
+## Running Tests
+
+To run the unit tests for this project, activate your virtual environment and run the following command:
+
+```bash
+venv/bin/pytest
 ```
 
 ## License

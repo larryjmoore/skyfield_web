@@ -5,3 +5,5 @@ pytz
 flask-limiter
 cachelib
 astral
+pytest
+python-dateutil
