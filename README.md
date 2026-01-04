@@ -11,12 +11,14 @@ If you would rather use my setup directly, you can access it now via https://sky
 
 Here is a sample setup for Home Assistant to use already configured position values, and set it to dark mode if the sun is below the horizon.
 
+```
 https://skyfieldweb.duckdns.org/skychart.png?
     lat={{ state_attr('zone.home', 'latitude') }}&
     lon={{ state_attr('zone.home', 'longitude') }}&
     gmt_offset={{ now().strftime('%z') }}&
     show_analemma=true
     {% if is_state('sun.sun', 'below_horizon') %}&dark_mode=true{% endif %}
+```
 
 ## Features
 
@@ -66,10 +68,8 @@ source venv/bin/activate
 ### 3. Install dependencies
 
 ```bash
-pip install -e .
+pip install -r requirements.txt
 ```
-
-This command installs the project in editable mode, making the `skyfield_web` package available.
 
 ### 4. Download astronomical data
 
@@ -80,7 +80,7 @@ The application requires astronomical ephemeris data. This will be downloaded au
 To start the Flask development server:
 
 ```bash
-python3 -m skyfield_web
+python3 app.py
 ```
 
 This will start the server on `http://0.0.0.0:8000`.
@@ -123,7 +123,7 @@ must be provided for the custom time to be applied. Otherwise, the current time 
 Example:
 
 ```
-http://localhost:8000/skychart.png?lat=34.0522&lon=-118.2437&gmt_offset=-7&show_constellation=true
+http://localhost:8000/skychart.png?lat=34.1&lon=-118.2&gmt_offset=-7&show_constellation=true
 ```
 
 ## License
