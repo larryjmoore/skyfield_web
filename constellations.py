@@ -5,8 +5,11 @@
 
 import os
 import math
+import datetime
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from skyfield.api import Star
+from matplotlib.axes import Axes
 
 THIS_DIR = os.path.split(__file__)[0]
 DATA_FILE = os.path.join(THIS_DIR, "constellations_by_RA_Dec.dat")
@@ -17,9 +20,9 @@ ZODIAC = [
 ]
 DEFAULT_CONSTELLATIONS = ZODIAC + ["Cassiopeia", "Orion", "Pegasus", "UrsaMajor"]
 
-def _read_data():
+def _read_data() -> Dict[str, List[Tuple[Tuple[float, float], Tuple[float, float]]]]:
     """Reads constellation data from the data file."""
-    constellations = {}
+    constellations: Dict[str, List[Tuple[Tuple[float, float], Tuple[float, float]]]] = {}
     with open(DATA_FILE) as datafile:
         for line in datafile:
             line = line.strip()
@@ -40,16 +43,16 @@ CONSTELLATION_DATA = _read_data()
 
 class Constellation:
     """A single constellation."""
-    def __init__(self, name, radec_pairs, plotter):
+    def __init__(self, name: str, radec_pairs: List[Tuple[Tuple[float, float], Tuple[float, float]]], plotter: Any):
         self.name = name
         self.radec_pairs = radec_pairs
         self.plotter = plotter
         self.line_color = plotter.COLOR_MAP.get("k", "k") if plotter.dark_mode else "k"
         self.point_color = plotter.COLOR_MAP.get("black", "black") if plotter.dark_mode else "black"
 
-    def draw(self, ax, when):
+    def draw(self, ax: Axes, when: datetime.datetime) -> None:
         """Draws the constellation on a matplotlib axis."""
-        plotted = []
+        plotted: List[Tuple[float, float]] = []
         for (ra1, dec1), (ra2, dec2) in self.radec_pairs:
             star1 = Star(ra_hours=ra1, dec_degrees=dec1)
             star2 = Star(ra_hours=ra2, dec_degrees=dec2)
@@ -72,7 +75,7 @@ class Constellation:
                 azi2 += math.pi * 2
             ax.plot(np.linspace(azi1, azi2, 10), np.linspace(alt1, alt2, 10), "-", color=self.line_color, linewidth=1, alpha=0.1)
 
-def build_constellations(plotter, whitelist=None):
+def build_constellations(plotter: Any, whitelist: Optional[List[str]] = None) -> List[Constellation]:
     """Builds a list of Constellation objects."""
     constellations = []
     for name, radec_pairs in CONSTELLATION_DATA.items():

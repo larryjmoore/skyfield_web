@@ -1,0 +1,28 @@
+2026-01-04 12:34:56 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://192.168.1.254:8000
+2026-01-04 12:34:56 | [33mPress CTRL+C to quit[0m
+2026-01-04 12:38:01 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://192.168.1.254:8000
+2026-01-04 12:38:01 | [33mPress CTRL+C to quit[0m
+2026-01-04 12:38:08 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=true&test=false
+2026-01-04 12:38:12 | 127.0.0.1 - - [04/Jan/2026 12:38:12] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=true&test=false HTTP/1.1" 200 -
+2026-01-04 12:38:16 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=1
+2026-01-04 12:38:20 | 127.0.0.1 - - [04/Jan/2026 12:38:20] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=1 HTTP/1.1" 200 -
+2026-01-04 12:38:24 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=no
+2026-01-04 12:38:24 | 127.0.0.1 - - [04/Jan/2026 12:38:24] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=no HTTP/1.1" 200 -
+2026-01-04 12:38:29 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=yes
+2026-01-04 12:38:33 | 127.0.0.1 - - [04/Jan/2026 12:38:33] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=yes HTTP/1.1" 200 -
+2026-01-04 12:38:37 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemmas=yes
+2026-01-04 12:38:38 | 127.0.0.1 - - [04/Jan/2026 12:38:38] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemmas=yes HTTP/1.1" 200 -
+2026-01-04 12:38:42 | 127.0.0.1 - - [04/Jan/2026 12:38:42] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=yes HTTP/1.1" 200 -
+2026-01-04 12:39:20 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=noo
+2026-01-04 12:39:21 | 127.0.0.1 - - [04/Jan/2026 12:39:21] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=noo HTTP/1.1" 200 -
+2026-01-04 12:39:28 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=yesss
+2026-01-04 12:39:29 | 127.0.0.1 - - [04/Jan/2026 12:39:29] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=yesss HTTP/1.1" 200 -
+2026-01-04 12:39:36 | 127.0.0.1 | /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=hi
+2026-01-04 12:39:37 | 127.0.0.1 - - [04/Jan/2026 12:39:37] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=hi HTTP/1.1" 200 -
+2026-01-04 12:39:42 | 127.0.0.1 - - [04/Jan/2026 12:39:42] "GET /skychart.png?lat=40.13&lon=-114&elevation=1400&show_analemma=1 HTTP/1.1" 200 -

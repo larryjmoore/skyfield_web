@@ -47,17 +47,17 @@ class AppTestCase(unittest.TestCase):
     def test_gmt_offset_invalid_format(self):
         response = self.client.get('/skychart.png?gmt_offset=invalid')
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Error: Invalid lat, lon, elevation, or gmt_offset.", response.data)
+        self.assertIn(b"Error: Invalid parameters", response.data)
 
     def test_gmt_offset_invalid_hh_mm(self):
         response = self.client.get('/skychart.png?gmt_offset=5:xx')
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Error: Invalid lat, lon, elevation, or gmt_offset.", response.data)
+        self.assertIn(b"Error: Invalid parameters", response.data)
 
     def test_gmt_offset_invalid_hhmm(self):
         response = self.client.get('/skychart.png?gmt_offset=-07x0')
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Error: Invalid lat, lon, elevation, or gmt_offset.", response.data)
+        self.assertIn(b"Error: Invalid parameters", response.data)
 
     def test_lat_valid(self):
         response = self.client.get('/skychart.png?lat=34.05')
@@ -66,7 +66,7 @@ class AppTestCase(unittest.TestCase):
     def test_lat_invalid(self):
         response = self.client.get('/skychart.png?lat=not_a_number')
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Error: Invalid lat, lon, elevation, or gmt_offset.", response.data)
+        self.assertIn(b"Error: Invalid parameters", response.data)
 
     def test_lon_valid(self):
         response = self.client.get('/skychart.png?lon=-118.25')
@@ -75,7 +75,7 @@ class AppTestCase(unittest.TestCase):
     def test_lon_invalid(self):
         response = self.client.get('/skychart.png?lon=not_a_number')
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Error: Invalid lat, lon, elevation, or gmt_offset.", response.data)
+        self.assertIn(b"Error: Invalid parameters", response.data)
 
     def test_elevation_valid(self):
         response = self.client.get('/skychart.png?elevation=1000')
@@ -84,7 +84,7 @@ class AppTestCase(unittest.TestCase):
     def test_elevation_invalid(self):
         response = self.client.get('/skychart.png?elevation=not_a_number')
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Error: Invalid lat, lon, elevation, or gmt_offset.", response.data)
+        self.assertIn(b"Error: Invalid parameters", response.data)
 
     def test_show_analemma_true(self):
         response = self.client.get('/skychart.png?show_analemma=true')

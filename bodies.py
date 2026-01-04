@@ -5,13 +5,16 @@
 
 import datetime
 import math
+import io
 from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple, Union
 from skyfield.api import Loader, Topos
 from skyfield import almanac
 from astral.location import LocationInfo
 from astral.sun import sun as astral_sun, dawn as astral_dawn, dusk as astral_dusk
 import matplotlib
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 import numpy as np
 import constellations
 
@@ -45,13 +48,13 @@ BODIES = [
 
 class SkyCalculator:
     """Handles astronomical calculations."""
-    def __init__(self, latlong, tz):
+    def __init__(self, latlong: Tuple[float, float], tz: datetime.tzinfo):
         self.lat, self.lon = latlong
         self.topos = Topos(latitude_degrees=self.lat, longitude_degrees=self.lon)
         self.location = sky_data.eph[EARTH] + self.topos
         self.timezone = tz
 
-    def compute_position(self, body, obs_datetime):
+    def compute_position(self, body: Any, obs_datetime: datetime.datetime) -> Tuple[float, float]:
         """Computes the position of a celestial body."""
         if obs_datetime.tzinfo is None:
             loc_time = obs_datetime.replace(tzinfo=self.timezone)
@@ -65,14 +68,14 @@ class SkyCalculator:
         return azi.radians, 90 - alt.degrees
 
     @lru_cache(maxsize=128)
-    def get_analemmas(self, dark_mode):
+    def get_analemmas(self, dark_mode: bool) -> List['AnalemmaPath']:
         """Computes and returns the analemma paths for a given location."""
         now = datetime.datetime.now(self.timezone)
         fixed_offset = now.utcoffset()
         fixed_tz = datetime.timezone(fixed_offset) if fixed_offset else datetime.timezone.utc
         
         class AnalemmaContext:
-            def __init__(self, calculator, dark_mode):
+            def __init__(self, calculator: 'SkyCalculator', dark_mode: bool):
                 self._calculator = calculator
                 self.COLOR_MAP = {
                     "black": "white", "k": "w", "white": "black", "w": "k",
@@ -84,7 +87,7 @@ class SkyCalculator:
                 self._dark_mode = dark_mode
                 self._label_background_color = "#3a3a3a" if dark_mode else "white"
             
-            def get_position(self, body, obs_datetime):
+            def get_position(self, body: Any, obs_datetime: datetime.datetime) -> Tuple[float, float]:
                 return self._calculator.compute_position(body, obs_datetime)
 
         context = AnalemmaContext(self, dark_mode)
@@ -96,7 +99,7 @@ class SkyCalculator:
         return analemmas
 
     @lru_cache(maxsize=256)
-    def get_astral_times(self, date_str):
+    def get_astral_times(self, date_str: str) -> Dict[str, str]:
         """Computes and returns a dictionary of twilight times using the astral library."""
         try:
             loc = LocationInfo(latitude=self.lat, longitude=self.lon, timezone=self.timezone)
@@ -116,7 +119,7 @@ class SkyCalculator:
         except (ValueError, KeyError):
             return {k: "N/A" for k in ['astronomical_dawn', 'nautical_dawn', 'civil_dawn', 'sunrise', 'solar_noon', 'sunset', 'civil_dusk', 'nautical_dusk', 'astronomical_dusk']}
 
-    def compute_moon_times(self, when):
+    def compute_moon_times(self, when: datetime.datetime) -> Tuple[str, str, str, float, Optional[Dict[str, Any]]]:
         """Calculates moon rise, set, phase, and next event for the given date."""
         start_of_day = when.replace(hour=0, minute=0, second=0, microsecond=0)
         start_search = sky_data.ts.utc(start_of_day)
@@ -153,7 +156,7 @@ class SkyCalculator:
 
 class SkyPlotter:
     """Handles plotting the sky chart."""
-    def __init__(self, calculator, **kwargs):
+    def __init__(self, calculator: SkyCalculator, **kwargs: Any):
         self.calculator = calculator
         self.config = kwargs
         self.dark_mode = self.config.get('dark_mode', False)
@@ -169,8 +172,9 @@ class SkyPlotter:
         self.tick_color = "darkgray" if self.dark_mode else "black"
         self.label_background_color = "#3a3a3a" if self.dark_mode else "white"
 
-    def plot_sky(self, output, when):
-        fig, ax = plt.subplots(1, 1, figsize=(6, 6.2), subplot_kw={"projection": "polar"})
+    def plot_sky(self, output: io.BytesIO, when: datetime.datetime) -> None:
+        fig = Figure(figsize=(6, 6.2))
+        ax = fig.add_subplot(1, 1, 1, projection="polar")
         fig.set_facecolor(self.background_color)
         ax.set_facecolor(self.background_color)
         ax.set_axisbelow(True)
@@ -189,9 +193,8 @@ class SkyPlotter:
         
         fig.tight_layout(rect=[0, 0.05, 1, 0.95])
         fig.savefig(output, format=self.config.get('image_type', 'png'), bbox_inches='tight', pad_inches=0.05, facecolor=self.background_color)
-        plt.close()
 
-    def _draw_objects(self, ax, when):
+    def _draw_objects(self, ax: Axes, when: datetime.datetime) -> None:
         # Analemmas
         if self.config.get('show_analemma', False):
             for analemma in self.calculator.get_analemmas(self.dark_mode):
@@ -217,7 +220,7 @@ class SkyPlotter:
             for constellation in constellations.build_constellations(self, constellation_list):
                 constellation.draw(ax, when)
 
-    def _add_text_info(self, fig, ax, when):
+    def _add_text_info(self, fig: Figure, ax: Axes, when: datetime.datetime) -> None:
         if self.config.get('show_time', True):
             fig.text(0.5, 0.99, when.strftime('%b %-d %Y, %H:%M %Z'), transform=fig.transFigure, fontsize=9, verticalalignment='top', horizontalalignment='center', fontname='monospace', color=self.text_color)
 
@@ -313,24 +316,24 @@ class SkyPlotter:
 
 class Sky:
     """Main class to interact with the sky chart generation."""
-    def __init__(self, latlong, tz, **kwargs):
+    def __init__(self, latlong: Tuple[float, float], tz: datetime.tzinfo, **kwargs: Any):
         self.calculator = SkyCalculator(latlong, tz)
         self.plotter = SkyPlotter(self.calculator, **kwargs)
 
-    def load(self):
+    def load(self) -> None:
         # Data is loaded globally now, so this is a no-op
         pass
 
-    def plot_sky(self, output, when):
+    def plot_sky(self, output: io.BytesIO, when: datetime.datetime) -> None:
         self.plotter.plot_sky(output, when)
 
 class BodyPath:
     # ... (BodyPath, AnalemmaPath, Point classes remain mostly the same, but adapt to the new structure) ...
-    def __init__(self, body, day, plotter, fmt, color, linewidth=1, alpha=0.8, dark_mode=False):
+    def __init__(self, body: Any, day: datetime.datetime, plotter: SkyPlotter, fmt: str, color: str, linewidth: int = 1, alpha: float = 0.8, dark_mode: bool = False):
         self._body = body
         self._day = day
         self._plotter = plotter
-        self.path = None
+        self.path: Optional[Tuple[List[float], List[float]]] = None
         self.fmt = fmt
         self.linewidth = linewidth
         self.alpha = alpha
@@ -338,7 +341,7 @@ class BodyPath:
         self.color = plotter.COLOR_MAP.get(color, color) if dark_mode else color
         self._compute_daily_path()
 
-    def _compute_daily_path(self, delta=datetime.timedelta(minutes=20)):
+    def _compute_daily_path(self, delta: datetime.timedelta = datetime.timedelta(minutes=20)) -> None:
         data = []
         if self._day.tzinfo is not None:
             self._day = self._day.replace(tzinfo=None)
@@ -350,19 +353,19 @@ class BodyPath:
                 data.append((np.nan, np.nan))
             else:
                 data.append((theta, r))
-        self.path = list(zip(*data))
+        self.path = list(zip(*data)) # type: ignore
 
-    def draw(self, ax):
+    def draw(self, ax: Axes) -> None:
         if self.path:
             ax.plot(*self.path, self.fmt, color=self.color, linewidth=self.linewidth, alpha=self.alpha)
             
 class AnalemmaPath:
-    def __init__(self, body, hour, context, fixed_tz, fmt, color, linewidth=1, alpha=0.8, dark_mode=False, label_background_color=None):
+    def __init__(self, body: Any, hour: int, context: Any, fixed_tz: datetime.tzinfo, fmt: str, color: str, linewidth: int = 1, alpha: float = 0.8, dark_mode: bool = False, label_background_color: Optional[str] = None):
         self._body = body
         self._hour = hour
         self._context = context
         self._fixed_tz = fixed_tz
-        self.path = None
+        self.path: Optional[Tuple[List[float], List[float]]] = None
         self.fmt = fmt
         self.linewidth = linewidth
         self.alpha = alpha
@@ -371,7 +374,7 @@ class AnalemmaPath:
         self.label_background_color = context._label_background_color if dark_mode else None
         self._compute_yearly_path()
 
-    def _compute_yearly_path(self):
+    def _compute_yearly_path(self) -> None:
         data = []
         year = datetime.datetime.now().year
         start_date = datetime.datetime(year, 1, 1)
@@ -387,9 +390,9 @@ class AnalemmaPath:
                 data.append((np.nan, np.nan))
 
         if data:
-            self.path = list(zip(*data))
+            self.path = list(zip(*data)) # type: ignore
             
-    def draw(self, ax):
+    def draw(self, ax: Axes) -> None:
         if self.path:
             ax.plot(*self.path, self.fmt, color=self.color, linewidth=self.linewidth, alpha=self.alpha)
             clean_path = [p for p in zip(*self.path) if not np.isnan(p[1])]
@@ -405,14 +408,14 @@ class AnalemmaPath:
                 ax.text(lbl_theta, lbl_r, f"{self._hour}", fontsize=6, color=self.color, ha='center', va='center', fontweight='bold', alpha=0.8, clip_on=True, bbox=bbox_props)
 
 class Point:
-    def __init__(self, label, body, color, size, plotter):
+    def __init__(self, label: str, body: Any, color: str, size: int, plotter: SkyPlotter):
         self._label = label
         self._body = body
         self._size = size
         self._plotter = plotter
         self._color = plotter.COLOR_MAP.get(color, color) if plotter.dark_mode else color
 
-    def draw(self, ax, when):
+    def draw(self, ax: Axes, when: datetime.datetime) -> None:
         theta, r = self._plotter.calculator.compute_position(self._body, when)
         if theta is not None and r < 90:
             ax.scatter(theta, r, s=self._size, label=self._label, alpha=1.0, color=self._color, edgecolor="black", zorder=10)
