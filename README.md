@@ -9,11 +9,20 @@ The application is designed to be integrated with Home Assistant by setting up a
 
 If you would rather use my setup directly, you can access it now via https://skyfieldweb.duckdns.org/skychart.png. Make sure to see below for how to customize the URL for your setup.
 
+Here is a sample setup for Home Assistant to use already configured position values, and set it to dark mode if the sun is below the horizon.
+
+https://skyfieldweb.duckdns.org/skychart.png?
+    lat={{ state_attr('zone.home', 'latitude') }}&
+    lon={{ state_attr('zone.home', 'longitude') }}&
+    gmt_offset={{ now().strftime('%z') }}&
+    show_analemma=true
+    {% if is_state('sun.sun', 'below_horizon') %}&dark_mode=true{% endif %}
+
 ## Features
 
 *   Displays apparent positions of the Sun, Moon, and planets.
 *   Generates sky charts as PNG images.
-*   Customizable with latitude, longitude, elevation, and timezone.
+*   Customizable with latitude, longitude, elevation, and GMT offset.
 *   Option to show analemma, constellations, and planets.
 
 ## Project Structure
@@ -89,7 +98,7 @@ You can customize the chart by providing query parameters:
 *   `lat`: Latitude (e.g., `34.0522`)
 *   `lon`: Longitude (e.g., `-118.2437`)
 *   `elevation`: Elevation in meters (e.g., `1447`)
-*   `timezone`: IANA Time Zone Database name (e.g., `America/Los_Angeles`)
+*   `gmt_offset`: GMT offset in hours (e.g., `-7`, `5.5`, `5:30`, `-0700`, or `0530`)
 *   `show_analemma`: `true` or `false` (default: `false`)
 *   `show_constellation`: `true` or `false` (default: `false`)
 *   `show_planets`: `true` or `false` (default: `true`)
@@ -114,7 +123,7 @@ must be provided for the custom time to be applied. Otherwise, the current time 
 Example:
 
 ```
-http://localhost:8000/skychart.png?lat=34.0522&lon=-118.2437&timezone=America/Los_Angeles&show_constellation=true
+http://localhost:8000/skychart.png?lat=34.0522&lon=-118.2437&gmt_offset=-7&show_constellation=true
 ```
 
 ## License

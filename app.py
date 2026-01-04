@@ -5,7 +5,6 @@ from flask import Flask, send_file, request, make_response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from cachelib import SimpleCache
-import pytz
 from skyfield.api import Loader
 from werkzeug.middleware.proxy_fix import ProxyFix
 import bodies
@@ -34,8 +33,7 @@ DEFAULT_LAT = 40.7608
 DEFAULT_LON = -111.8910
 DEFAULT_TZ = 'America/Denver' 
 DEFAULT_ELEV = 0
-
-@app.errorhandler(429)
+DEFAULT_GMT_OFFSET = -7
 def ratelimit_handler(e):
     # Any rate limit hit now means the hard "1/second" limit was exceeded,
     # so we directly return the "Too Many Requests" error.
@@ -67,7 +65,30 @@ def serve_sky_chart():
     except ValueError:
         return "Error: lat, lon, and elevation must be numbers.", 400
 
-    tz_name = request.args.get('timezone', DEFAULT_TZ)
+    try:
+        offset_str = request.args.get('gmt_offset', str(DEFAULT_GMT_OFFSET)).strip()
+        if ':' in offset_str:
+            parts = offset_str.split(':')
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            if hours < 0:
+                gmt_offset = hours - (minutes / 60.0)
+            else:
+                gmt_offset = hours + (minutes / 60.0)
+        elif len(offset_str) == 5 and (offset_str.startswith('+') or offset_str.startswith('-')) and offset_str[1:].isdigit():
+            sign = -1 if offset_str[0] == '-' else 1
+            hours = int(offset_str[1:3])
+            minutes = int(offset_str[3:5])
+            gmt_offset = sign * (hours + minutes / 60.0)
+        elif len(offset_str) == 4 and offset_str.isdigit():
+            hours = int(offset_str[0:2])
+            minutes = int(offset_str[2:4])
+            gmt_offset = hours + (minutes / 60.0)
+        else:
+            gmt_offset = float(offset_str)
+        tz = datetime.timezone(datetime.timedelta(hours=gmt_offset))
+    except (ValueError, TypeError):
+        return "Error: gmt_offset must be a number (e.g., -7, 5.5), in HH:MM format (e.g., -7:00, 5:30), or in +/-HHMM/HHMM format (e.g., -0700, 0530).", 400
     
     def is_true(key, default):
         val = request.args.get(key)
@@ -87,7 +108,7 @@ def serve_sky_chart():
 
     sky = bodies.Sky(
         latlong=(lat, lon), 
-        tzname=tz_name,
+        tz=tz,
         show_constellations=show_constellations,
         show_analemma=show_analemma,
         planet_list=planet_filter,
@@ -100,12 +121,6 @@ def serve_sky_chart():
     )
 
     sky.load() 
-
-    try:
-        tz = pytz.timezone(tz_name)
-    except pytz.UnknownTimeZoneError:
-        return f"Error: Unknown timezone '{tz_name}'", 400
-
     # Get date and time from request args or default to now
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)

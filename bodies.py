@@ -6,7 +6,6 @@
 import datetime
 import math
 from functools import lru_cache
-from pytz import timezone
 from skyfield.api import Loader, Topos
 from skyfield import almanac
 from astral.location import LocationInfo
@@ -41,14 +40,13 @@ BODIES = [
 ]
 
 @lru_cache(maxsize=128)
-def _get_or_compute_analemmas(lat, lon, tz_name, dark_mode):
+def _get_or_compute_analemmas(lat, lon, tz, dark_mode):
     """
     Computes and returns the analemma paths for a given location.
     This function is cached to avoid re-computation for the same lat/lon/tz/dark_mode.
     """
     location = EPH[EARTH] + Topos(latitude_degrees=lat, longitude_degrees=lon)
-    timezone_obj = timezone(tz_name)
-    now = datetime.datetime.now(timezone_obj)
+    now = datetime.datetime.now(tz)
     fixed_offset = now.utcoffset()
     fixed_tz = datetime.timezone(fixed_offset) if fixed_offset else datetime.timezone.utc
     
@@ -68,7 +66,7 @@ def _get_or_compute_analemmas(lat, lon, tz_name, dark_mode):
             self._label_background_color = "#3a3a3a" if dark_mode else "white"
 
         def get_position(self, body, obs_datetime):
-            return compute_position(location, TS, timezone_obj, body, obs_datetime)
+            return compute_position(location, TS, tz, body, obs_datetime)
 
     context = AnalemmaContext(dark_mode)
 
@@ -80,13 +78,13 @@ def _get_or_compute_analemmas(lat, lon, tz_name, dark_mode):
     return analemmas
 
 @lru_cache(maxsize=256)
-def _get_or_compute_astral_times(lat, lon, tz_name, date_str):
+def _get_or_compute_astral_times(lat, lon, tz, date_str):
     """
     Computes and returns a dictionary of twilight times using the astral library.
     This function is cached to avoid re-computation.
     """
     try:
-        loc = LocationInfo(latitude=lat, longitude=lon, timezone=tz_name)
+        loc = LocationInfo(latitude=lat, longitude=lon, timezone=tz)
         d = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
         
         s = astral_sun(loc.observer, date=d, tzinfo=loc.timezone)
@@ -109,7 +107,7 @@ def _get_or_compute_astral_times(lat, lon, tz_name, date_str):
 def compute_position(location, timescale, timezone_obj, body, obs_datetime):
     """Computes the position of a celestial body for a given location and time."""
     if obs_datetime.tzinfo is None:
-        loc_time = timezone_obj.localize(obs_datetime)
+        loc_time = obs_datetime.replace(tzinfo=timezone_obj)
     else:
         loc_time = obs_datetime
 
@@ -122,11 +120,10 @@ def compute_position(location, timescale, timezone_obj, body, obs_datetime):
     return theta, r
 
 class Sky:
-    def __init__(self, latlong, tzname, show_constellations=True, show_time=True, show_legend=True, show_analemma=True, constellation_list=None, planet_list=None, north_up=False, horizontal_flip=False, image_type="png", show_stats=True, dark_mode=False):
+    def __init__(self, latlong, tz, show_constellations=True, show_time=True, show_legend=True, show_analemma=True, constellation_list=None, planet_list=None, north_up=False, horizontal_flip=False, image_type="png", show_stats=True, dark_mode=False):
         self.lat, self.lon = latlong
         self._latlong = Topos(latitude_degrees=self.lat, longitude_degrees=self.lon)
-        self._timezone = timezone(tzname)
-        self._tzname = tzname
+        self._timezone = tz
         self._planets = None
         self._ts = None
         self._location = None
@@ -201,7 +198,7 @@ class Sky:
         self._compute_solstice_paths()
         
         if self._show_analemma:
-            self._analemmas = _get_or_compute_analemmas(self.lat, self.lon, self._tzname, self._dark_mode)
+            self._analemmas = _get_or_compute_analemmas(self.lat, self.lon, self._timezone, self._dark_mode)
 
         self._load_points()
         if self._show_constellations:
@@ -284,7 +281,7 @@ class Sky:
         
         # Get twilight times from the new cached astral function
         date_str = when.strftime('%Y-%m-%d')
-        self._times = _get_or_compute_astral_times(self.lat, self.lon, self._tzname, date_str)
+        self._times = _get_or_compute_astral_times(self.lat, self.lon, self._timezone, date_str)
         
         # Get moon times
         self._compute_moon_times(when)
@@ -311,7 +308,7 @@ class Sky:
             # Next Solar Event
             next_event_str = "Next Event: N/A"
             try:
-                now_aware = self._timezone.localize(when) if when.tzinfo is None else when
+                now_aware = when.replace(tzinfo=self._timezone) if when.tzinfo is None else when
                 sr_str = self._times.get('sunrise')
                 sn_str = self._times.get('solar_noon')
                 ss_str = self._times.get('sunset')
@@ -329,7 +326,7 @@ class Sky:
                 
                 if next_event is None: # Must be tomorrow's sunrise
                     tomorrow_str = (when + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-                    tmrw_times = _get_or_compute_astral_times(self.lat, self.lon, self._tzname, tomorrow_str)
+                    tmrw_times = _get_or_compute_astral_times(self.lat, self.lon, self._timezone, tomorrow_str)
                     sr_str_tmrw = tmrw_times.get('sunrise')
                     if sr_str_tmrw != "N/A":
                         sr_time_tmrw = datetime.datetime.strptime(f"{tomorrow_str} {sr_str_tmrw}", '%Y-%m-%d %H:%M').astimezone(self._timezone)
