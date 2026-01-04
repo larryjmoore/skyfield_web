@@ -78,11 +78,14 @@ def create_app() -> Flask:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1) # type: ignore
     
     # Configure logging to both stdout and file
-    handlers = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('requests.log')
-    ]
+    handlers: List[logging.Handler] = [logging.StreamHandler(sys.stdout)]
     
+    try:
+        handlers.append(logging.FileHandler('requests.log'))
+    except (PermissionError, OSError):
+        # Fallback if we cannot write to the file (e.g. running in a restricted directory)
+        sys.stderr.write("WARNING: Could not create 'requests.log' due to permissions. Logging to stdout only.\n")
+
     logging.basicConfig(
         handlers=handlers,
         level=logging.INFO,
