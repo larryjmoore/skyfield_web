@@ -201,11 +201,15 @@ class SkyPlotter:
                 analemma.draw(ax)
 
         # Sun paths
-        today_sunpath = BodyPath(sky_data.eph[SUN], when.replace(hour=0, minute=0, second=0, microsecond=0), self, "-", color="k", linewidth=1, alpha=0.8)
-        winter_solstice = BodyPath(sky_data.eph[SUN], datetime.datetime(when.year, 12, 21), self, fmt="--", color="blue", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
-        summer_solstice = BodyPath(sky_data.eph[SUN], datetime.datetime(when.year, 6, 21), self, fmt="--", color="green", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
-        for sunpath in [winter_solstice, summer_solstice, today_sunpath]:
-            sunpath.draw(ax)
+        today_sunpath = BodyPath(sky_data.eph[SUN], when.replace(hour=0, minute=0, second=0, microsecond=0), self, "-.", color="orange", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
+        winter_solstice = BodyPath(sky_data.eph[SUN], datetime.datetime(when.year, 12, 21), self, fmt="-", color="gray", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
+        summer_solstice = BodyPath(sky_data.eph[SUN], datetime.datetime(when.year, 6, 21), self, fmt="-", color="gray", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
+        
+        # Moon path
+        moon_path = BodyPath(sky_data.eph['moon'], when, self, "--", color="k", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
+
+        for path in [winter_solstice, summer_solstice, today_sunpath, moon_path]:
+            path.draw(ax)
 
         # Planets
         planet_list = self.config.get('planet_list', None)
@@ -346,13 +350,44 @@ class BodyPath:
         if self._day.tzinfo is not None:
             self._day = self._day.replace(tzinfo=None)
         
+        prev_theta = None
+        prev_r = None
+
         for interval in range(73): 
             now = self._day + delta * interval
             theta, r = self._plotter.calculator.compute_position(self._body, now)
-            if theta is None or r > 90:
+            
+            if theta is None:
+                data.append((np.nan, np.nan))
+                prev_theta, prev_r = None, None
+                continue
+
+            # Rising event: prev_r > 90 (hidden) and r <= 90 (visible)
+            if prev_r is not None and prev_r > 90 and r <= 90:
+                f = (90 - prev_r) / (r - prev_r)
+                diff_theta = theta - prev_theta
+                if diff_theta > np.pi: diff_theta -= 2*np.pi
+                elif diff_theta < -np.pi: diff_theta += 2*np.pi
+                cross_theta = prev_theta + diff_theta * f
+                data.append((cross_theta, 90.0))
+            
+            # Setting event: prev_r <= 90 (visible) and r > 90 (hidden)
+            if prev_r is not None and prev_r <= 90 and r > 90:
+                f = (90 - prev_r) / (r - prev_r)
+                diff_theta = theta - prev_theta
+                if diff_theta > np.pi: diff_theta -= 2*np.pi
+                elif diff_theta < -np.pi: diff_theta += 2*np.pi
+                cross_theta = prev_theta + diff_theta * f
+                data.append((cross_theta, 90.0))
+
+            if r > 90:
                 data.append((np.nan, np.nan))
             else:
                 data.append((theta, r))
+                
+            prev_theta = theta
+            prev_r = r
+
         self.path = list(zip(*data)) # type: ignore
 
     def draw(self, ax: Axes) -> None:
