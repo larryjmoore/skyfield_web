@@ -83,6 +83,8 @@ class SkyCalculator:
                     "green": "lime", "gold": "gold", "pink": "pink",
                     "rosybrown": "rosybrown", "chocolate": "chocolate", "khaki": "khaki",
                     "lightsteelblue": "lightsteelblue", "royalblue": "royalblue",
+                    "orange": "orange",
+                    "dimgray": "white",
                 }
                 self._dark_mode = dark_mode
                 self._label_background_color = "#3a3a3a" if dark_mode else "white"
@@ -165,6 +167,8 @@ class SkyPlotter:
             "lightgrey": "dimgray", "blue": "cyan", "green": "lime", "gold": "gold", "pink": "pink",
             "rosybrown": "rosybrown", "chocolate": "chocolate", "khaki": "khaki", 
             "lightsteelblue": "lightsteelblue", "royalblue": "royalblue",
+            "orange": "orange",
+            "dimgray": "white",
         }
         self.background_color = "#1a1a1a" if self.dark_mode else "white"
         self.text_color = self.COLOR_MAP["black"] if self.dark_mode else "black"
@@ -201,12 +205,12 @@ class SkyPlotter:
                 analemma.draw(ax)
 
         # Sun paths
-        today_sunpath = BodyPath(sky_data.eph[SUN], when.replace(hour=0, minute=0, second=0, microsecond=0), self, "-.", color="orange", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
+        today_sunpath = BodyPath(sky_data.eph[SUN], when.replace(hour=0, minute=0, second=0, microsecond=0), self, "-", color="orange", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
         winter_solstice = BodyPath(sky_data.eph[SUN], datetime.datetime(when.year, 12, 21), self, fmt="-", color="gray", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
         summer_solstice = BodyPath(sky_data.eph[SUN], datetime.datetime(when.year, 6, 21), self, fmt="-", color="gray", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
         
         # Moon path
-        moon_path = BodyPath(sky_data.eph['moon'], when, self, "--", color="k", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
+        moon_path = BodyPath(sky_data.eph['moon'], when, self, "--", color="dimgray", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
 
         for path in [winter_solstice, summer_solstice, today_sunpath, moon_path]:
             path.draw(ax)
