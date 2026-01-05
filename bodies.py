@@ -17,6 +17,8 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 import numpy as np
 import constellations
+import matplotlib.path as mpath
+import matplotlib.transforms as mtransforms
 
 matplotlib.use("agg")
 
@@ -79,7 +81,7 @@ class SkyCalculator:
                 self._calculator = calculator
                 self.COLOR_MAP = {
                     "black": "white", "k": "w", "white": "black", "w": "k",
-                    "gray": "darkgray", "lightgrey": "dimgray", "blue": "cyan",
+                    "gray": "darkgray", "lightgrey": "white", "blue": "cyan",
                     "green": "lime", "gold": "gold", "pink": "pink",
                     "rosybrown": "rosybrown", "chocolate": "chocolate", "khaki": "khaki",
                     "lightsteelblue": "lightsteelblue", "royalblue": "royalblue",
@@ -164,7 +166,7 @@ class SkyPlotter:
         self.dark_mode = self.config.get('dark_mode', False)
         self.COLOR_MAP = {
             "black": "white", "k": "w", "white": "black", "w": "k", "gray": "darkgray",
-            "lightgrey": "dimgray", "blue": "cyan", "green": "lime", "gold": "gold", "pink": "pink",
+            "lightgrey": "white", "blue": "cyan", "green": "lime", "gold": "gold", "pink": "pink",
             "rosybrown": "rosybrown", "chocolate": "chocolate", "khaki": "khaki", 
             "lightsteelblue": "lightsteelblue", "royalblue": "royalblue",
             "orange": "orange",
@@ -456,5 +458,69 @@ class Point:
 
     def draw(self, ax: Axes, when: datetime.datetime) -> None:
         theta, r = self._plotter.calculator.compute_position(self._body, when)
-        if theta is not None and r < 90:
+        
+        if theta is None or r >= 90:
+            return
+
+        if self._label == "Moon":
+            # 1. Calculate Geometry for Rotation
+            # Get Sun pos for rotation reference
+            theta_sun, r_sun = self._plotter.calculator.compute_position(sky_data.eph[SUN], when)
+            
+            # Convert to pixel coords to get visual angle on the plot
+            # ax.transData transforms (theta, r) -> (x, y) pixels
+            p1 = ax.transData.transform([(theta, r)])[0]
+            p2 = ax.transData.transform([(theta_sun, r_sun)])[0]
+            
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            rotation = np.degrees(np.arctan2(dy, dx))
+            
+            # 2. Calculate Phase Fraction
+            t = sky_data.ts.utc(when)
+            fraction = almanac.fraction_illuminated(sky_data.eph, 'moon', t)
+            
+            # 3. Create Custom Path for Lit Portion
+            # w = semi-minor axis of the terminator ellipse (-1 to 1)
+            # w = 1 means Full, w = -1 means New (dark), w = 0 means Quarter
+            # Formula: w = 1 - 2 * fraction ? 
+            # If fraction=1 (Full), w=-1. Curve is Left Semicircle. Total = Right + Left = Full. Correct.
+            # If fraction=0 (New), w=1. Curve is Right Semicircle. Total = Right - Right = Empty. Correct.
+            w = 1 - 2 * fraction
+            
+            # Generate vertices
+            N = 50
+            # Right semicircle (Sunward side): t from -pi/2 to pi/2
+            t_right = np.linspace(-np.pi/2, np.pi/2, N)
+            x_right = 0.5 * np.cos(t_right) # Scale by 0.5 to match standard marker radius
+            y_right = 0.5 * np.sin(t_right)
+            
+            # Terminator ellipse: t from pi/2 to -pi/2
+            t_left = np.linspace(np.pi/2, -np.pi/2, N)
+            y_left = 0.5 * np.sin(t_left)
+            x_left = 0.5 * w * np.cos(t_left)
+            
+            verts = np.vstack((
+                np.column_stack((x_right, y_right)),
+                np.column_stack((x_left, y_left)),
+                [[0, -0.5]] 
+            ))
+            
+            path_lit = mpath.Path(verts)
+            
+            # Rotate path to point towards Sun
+            trans = mtransforms.Affine2D().rotate_deg(rotation)
+            path_lit_rotated = path_lit.transformed(trans)
+            
+            # 4. Draw
+            # Draw Outline (Full Moon shape background)
+            unlit_color = '#222222' if self._plotter.dark_mode else 'gray'
+            ax.scatter(theta, r, s=self._size, marker='o', 
+                       edgecolor=self._color if self._plotter.dark_mode else 'black', 
+                       facecolor=unlit_color, linewidth=0.5, zorder=10)
+            
+            # Draw Lit Part
+            ax.scatter(theta, r, s=self._size, marker=path_lit_rotated,
+                       edgecolor='none', facecolor=self._color, zorder=10, label=self._label)
+        else:
             ax.scatter(theta, r, s=self._size, label=self._label, alpha=1.0, color=self._color, edgecolor="black", zorder=10)
