@@ -448,6 +448,66 @@ class AnalemmaPath:
                 
                 ax.text(lbl_theta, lbl_r, f"{self._hour}", fontsize=6, color=self.color, ha='center', va='center', fontweight='bold', alpha=0.8, clip_on=True, bbox=bbox_props)
 
+def moon_bright_limb_rotation_deg(observer, ts, eph, when, lat_deg, lon_deg):
+    """
+    Moon bright-limb rotation angle in degrees, matching MoonCalc / SunCalc.
+
+    rotation = PA_bright_limb - parallactic_angle
+
+    Angle is CCW from local zenith toward celestial east.
+    """
+
+    t = ts.utc(when)
+
+    # Apparent topocentric positions
+    moon = observer.at(t).observe(eph['moon']).apparent()
+    sun  = observer.at(t).observe(eph['sun']).apparent()
+
+    # Equatorial coordinates
+    ra_m, dec_m, _ = moon.radec()
+    ra_s, dec_s, _ = sun.radec()
+
+    ra_m = ra_m.radians
+    dec_m = dec_m.radians
+    ra_s = ra_s.radians
+    dec_s = dec_s.radians
+
+    # ----------------------------------
+    # 1) Bright limb position angle (PA)
+    # ----------------------------------
+    d_ra = ra_s - ra_m
+
+    y = np.sin(d_ra) * np.cos(dec_s)
+    x = (np.cos(dec_m) * np.sin(dec_s)
+         - np.sin(dec_m) * np.cos(dec_s) * np.cos(d_ra))
+
+    pa = np.arctan2(y, x)   # radians, CCW from celestial north
+
+    # ----------------------------------
+    # 2) Parallactic angle q
+    # ----------------------------------
+    gast_hours = t.gast
+    lst_hours = (gast_hours + lon_deg / 15.0) % 24.0
+
+    ra_m_hours = ra_m * 12.0 / np.pi
+    H_hours = lst_hours - ra_m_hours
+    H = np.radians(H_hours * 15.0)
+
+    lat = np.radians(lat_deg)
+    dec = dec_m
+
+    q = np.arctan2(
+        np.sin(H),
+        np.tan(lat) * np.cos(dec) - np.sin(dec) * np.cos(H)
+    )
+
+    # ----------------------------------
+    # 3) Zenith angle of bright limb
+    # ----------------------------------
+    rotation_deg = np.degrees(pa - q) + 90
+
+    return rotation_deg
+
 class Point:
     def __init__(self, label: str, body: Any, color: str, size: int, plotter: SkyPlotter):
         self._label = label
@@ -464,17 +524,14 @@ class Point:
 
         if self._label == "Moon":
             # 1. Calculate Geometry for Rotation
-            # Get Sun pos for rotation reference
-            theta_sun, r_sun = self._plotter.calculator.compute_position(sky_data.eph[SUN], when)
-            
-            # Convert to pixel coords to get visual angle on the plot
-            # ax.transData transforms (theta, r) -> (x, y) pixels
-            p1 = ax.transData.transform([(theta, r)])[0]
-            p2 = ax.transData.transform([(theta_sun, r_sun)])[0]
-            
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            rotation = np.degrees(np.arctan2(dy, dx))
+            rotation = moon_bright_limb_rotation_deg(
+                observer=self._plotter.calculator.location,
+                ts=sky_data.ts,
+                eph=sky_data.eph,
+                when=when,
+                lat_deg=self._plotter.calculator.lat,
+                lon_deg=self._plotter.calculator.lon,
+            )
             
             # 2. Calculate Phase Fraction
             t = sky_data.ts.utc(when)
