@@ -34,3 +34,6 @@ GEMINI.md
 
 # Logs
 requests.log
+
+# Cache
+flask_cache/

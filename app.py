@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional, Union, List
 from flask import Flask, send_file, request, make_response, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from cachelib import SimpleCache
+from cachelib import FileSystemCache
 from werkzeug.middleware.proxy_fix import ProxyFix
 from pydantic import BaseModel, Field, ValidationError, field_validator, BeforeValidator
 from typing_extensions import Annotated
@@ -102,7 +102,13 @@ def create_app() -> Flask:
         default_limits=["200 per day", "50 per hour"],
         storage_uri="memory://",
     )
-    cache = SimpleCache()
+    
+    # Use FileSystemCache to share cache between Gunicorn workers
+    import os
+    cache_dir = os.path.join(os.getcwd(), 'flask_cache')
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    cache = FileSystemCache(cache_dir, threshold=1000, default_timeout=60)
 
     def ratelimit_handler(e: Any) -> Response:
         return make_response(f"Too Many Requests: {e.description}", 429)

@@ -6,6 +6,7 @@
 import datetime
 import math
 import io
+import os
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple, Union
 from skyfield.api import Loader, Topos
@@ -19,8 +20,18 @@ import numpy as np
 import constellations
 import matplotlib.path as mpath
 import matplotlib.transforms as mtransforms
+from cachelib import FileSystemCache
 
 matplotlib.use("agg")
+
+# Shared cache for analemma calculations (heavy)
+# We use the same directory as the main app to keep things simple
+CACHE_DIR = os.path.join(os.getcwd(), 'flask_cache')
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
+
+# Indefinite timeout (effectively) for analemma geometry as it changes very slowly (years)
+analemma_cache = FileSystemCache(CACHE_DIR, threshold=1000, default_timeout=31536000)
 
 class SkyData:
     """Encapsulates the skyfield data."""
@@ -48,13 +59,26 @@ BODIES = [
     ("Neptune", "neptune barycenter", "royalblue", 30),
 ]
 
-@lru_cache(maxsize=64)
 def calculate_analemma_paths_data(lat: float, lon: float, tz_offset_seconds: float) -> Dict[int, List[Tuple[float, float]]]:
     """
     Calculates the analemma path points for all 24 hours.
     Returns a dictionary mapping hour (int) to a list of (theta, r) tuples.
     This function is cached to avoid re-calculating for the same location.
     """
+    cache_key = f"analemma_v1_{lat}_{lon}_{tz_offset_seconds}"
+    cached_result = analemma_cache.get(cache_key)
+    
+    if cached_result:
+        # Status is N/A or Skipped effectively for the calculation part, 
+        # but to match the 'MISS' logic in app.py which checks if we *did* the work,
+        # here we didn't do the work. 
+        # However, the previous logic in app.py was: g.analemma_status starts as HIT.
+        # If we enter this function and DO the work, we set it to MISS.
+        # If we return early here, g.analemma_status remains HIT (from app.py initialization).
+        # So we do NOT need to touch g.analemma_status here.
+        return cached_result
+
+    # If we are here, we are about to calculate. Set status to MISS.
     try:
         from flask import has_request_context, g
         if has_request_context():
@@ -94,6 +118,7 @@ def calculate_analemma_paths_data(lat: float, lon: float, tz_offset_seconds: flo
         # But to match logic, we just return the data. Logic to filter is in AnalemmaPath/get_analemmas.
         results[hour] = data
         
+    analemma_cache.set(cache_key, results)
     return results
 
 class SkyCalculator:
