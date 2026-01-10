@@ -104,17 +104,19 @@ def create_app() -> Flask:
     def ratelimit_handler(e: Any) -> Response:
         return make_response(f"Too Many Requests: {e.description}", 429)
 
-    def cached(timeout: int = 300) -> Callable:
+    def cached(timeout: int = 31536000) -> Callable:
         def decorator(f: Callable) -> Callable:
             @wraps(f)
             def decorated_function(*args: Any, **kwargs: Any) -> Any:
                 cache_key = str(sorted(request.args.items()))
                 cached_image = cache.get(cache_key)
                 if cached_image:
+                    logging.info(f"Cache HIT for key: {cache_key}")
                     response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
                     response.headers.set('X-Cache', 'HIT')
                     return response
                 
+                logging.info(f"Cache MISS for key: {cache_key}")
                 result = f(*args, **kwargs)
                 if not isinstance(result, io.BytesIO):
                     return result

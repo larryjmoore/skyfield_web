@@ -48,6 +48,47 @@ BODIES = [
     ("Neptune", "neptune barycenter", "royalblue", 30),
 ]
 
+@lru_cache(maxsize=64)
+def calculate_analemma_paths_data(lat: float, lon: float, tz_offset_seconds: float) -> Dict[int, List[Tuple[float, float]]]:
+    """
+    Calculates the analemma path points for all 24 hours.
+    Returns a dictionary mapping hour (int) to a list of (theta, r) tuples.
+    This function is cached to avoid re-calculating for the same location.
+    """
+    tz = datetime.timezone(datetime.timedelta(seconds=tz_offset_seconds))
+    # We create a temporary calculator just for the math.
+    calc = SkyCalculator((lat, lon), tz)
+    
+    results = {}
+    
+    year = datetime.datetime.now().year
+    start_date = datetime.datetime(year, 1, 1)
+    
+    # Check every 5 days
+    days = [start_date + datetime.timedelta(days=i) for i in range(0, 366, 5)]
+    
+    for hour in range(24):
+        data = []
+        has_visible_points = False
+        for d in days:
+            # Construct time with fixed offset
+            dt = datetime.datetime(d.year, d.month, d.day, hour, 0, 0, tzinfo=tz)
+            
+            # Using calc.compute_position directly
+            theta, r = calc.compute_position(sky_data.eph[SUN], dt)
+            
+            if r <= 90:
+                data.append((theta, r))
+                has_visible_points = True
+            else:
+                data.append((np.nan, np.nan))
+        
+        # Only store if there are visible points? No, store all so we can cache "empty" paths too (and just not draw them)
+        # But to match logic, we just return the data. Logic to filter is in AnalemmaPath/get_analemmas.
+        results[hour] = data
+        
+    return results
+
 class SkyCalculator:
     """Handles astronomical calculations."""
     def __init__(self, latlong: Tuple[float, float], tz: datetime.tzinfo):
@@ -69,12 +110,14 @@ class SkyCalculator:
         
         return azi.radians, 90 - alt.degrees
 
-    @lru_cache(maxsize=128)
     def get_analemmas(self, dark_mode: bool) -> List['AnalemmaPath']:
         """Computes and returns the analemma paths for a given location."""
         now = datetime.datetime.now(self.timezone)
         fixed_offset = now.utcoffset()
         fixed_tz = datetime.timezone(fixed_offset) if fixed_offset else datetime.timezone.utc
+        
+        tz_offset_seconds = fixed_offset.total_seconds() if fixed_offset else 0.0
+        all_paths_data = calculate_analemma_paths_data(self.lat, self.lon, tz_offset_seconds)
         
         class AnalemmaContext:
             def __init__(self, calculator: 'SkyCalculator', dark_mode: bool):
@@ -97,7 +140,7 @@ class SkyCalculator:
         context = AnalemmaContext(self, dark_mode)
         analemmas = []
         for hour in range(24):
-            path = AnalemmaPath(sky_data.eph[SUN], hour, context, fixed_tz, fmt=":", color="gray", linewidth=1, alpha=0.5, dark_mode=dark_mode, label_background_color=context._label_background_color)
+            path = AnalemmaPath(sky_data.eph[SUN], hour, context, fixed_tz, fmt=":", color="gray", linewidth=1, alpha=0.5, dark_mode=dark_mode, label_background_color=context._label_background_color, path_data=all_paths_data.get(hour))
             if path.is_visible:
                 analemmas.append(path)
         return analemmas
@@ -401,7 +444,7 @@ class BodyPath:
             ax.plot(*self.path, self.fmt, color=self.color, linewidth=self.linewidth, alpha=self.alpha)
             
 class AnalemmaPath:
-    def __init__(self, body: Any, hour: int, context: Any, fixed_tz: datetime.tzinfo, fmt: str, color: str, linewidth: int = 1, alpha: float = 0.8, dark_mode: bool = False, label_background_color: Optional[str] = None):
+    def __init__(self, body: Any, hour: int, context: Any, fixed_tz: datetime.tzinfo, fmt: str, color: str, linewidth: int = 1, alpha: float = 0.8, dark_mode: bool = False, label_background_color: Optional[str] = None, path_data: Optional[List[Tuple[float, float]]] = None):
         self._body = body
         self._hour = hour
         self._context = context
@@ -413,7 +456,19 @@ class AnalemmaPath:
         self.is_visible = False
         self.color = context.COLOR_MAP.get(color, color) if dark_mode else color
         self.label_background_color = context._label_background_color if dark_mode else None
-        self._compute_yearly_path()
+        
+        if path_data:
+            self.path = list(zip(*path_data)) # type: ignore
+            # Check for visibility
+            if self.path and len(self.path) > 1:
+                rs = self.path[1]
+                # Check if any r is not nan and <= 90
+                # Note: The cached data sets invisible points to (nan, nan), so just checking for not-nan is usually enough, 
+                # but r <= 90 is the strict condition.
+                if any((not np.isnan(r) and r <= 90) for r in rs):
+                    self.is_visible = True
+        else:
+            self._compute_yearly_path()
 
     def _compute_yearly_path(self) -> None:
         data = []
