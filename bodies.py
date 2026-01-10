@@ -129,17 +129,30 @@ class SkyCalculator:
         self.location = sky_data.eph[EARTH] + self.topos
         self.timezone = tz
 
-    def compute_position(self, body: Any, obs_datetime: datetime.datetime) -> Tuple[float, float]:
-        """Computes the position of a celestial body."""
-        if obs_datetime.tzinfo is None:
-            loc_time = obs_datetime.replace(tzinfo=self.timezone)
+    def compute_position(self, body: Any, obs_datetime: Union[datetime.datetime, List[datetime.datetime]]) -> Tuple[Any, Any]:
+        """Computes the position of a celestial body. Supports single datetime or list of datetimes."""
+        if isinstance(obs_datetime, list):
+            # Vectorized calculation
+            loc_times = []
+            for dt in obs_datetime:
+                if dt.tzinfo is None:
+                    loc_times.append(dt.replace(tzinfo=self.timezone))
+                else:
+                    loc_times.append(dt)
+            
+            obs_time = sky_data.ts.utc(loc_times)
         else:
-            loc_time = obs_datetime
-        
-        obs_time = sky_data.ts.utc(loc_time)
+            # Single calculation
+            if obs_datetime.tzinfo is None:
+                loc_time = obs_datetime.replace(tzinfo=self.timezone)
+            else:
+                loc_time = obs_datetime
+            obs_time = sky_data.ts.utc(loc_time)
+
         astrometric = self.location.at(obs_time).observe(body)
         alt, azi, _d = astrometric.apparent().altaz()
         
+        # Skyfield returns numpy arrays for vectors, floats for scalars
         return azi.radians, 90 - alt.degrees
 
     def get_analemmas(self, dark_mode: bool) -> List['AnalemmaPath']:
@@ -431,14 +444,19 @@ class BodyPath:
         if self._day.tzinfo is not None:
             self._day = self._day.replace(tzinfo=None)
         
+        # Vectorized generation of times
+        times = [self._day + delta * i for i in range(73)]
+        
+        # Batch compute positions
+        thetas, rs = self._plotter.calculator.compute_position(self._body, times)
+        
         prev_theta = None
         prev_r = None
 
-        for interval in range(73): 
-            now = self._day + delta * interval
-            theta, r = self._plotter.calculator.compute_position(self._body, now)
-            
-            if theta is None:
+        # Iterate through results to build path with horizon crossings
+        # thetas and rs are numpy arrays if 73 > 1, but let's treat them as iterables
+        for theta, r in zip(thetas, rs):
+            if theta is None or np.isnan(theta): # Skyfield usually doesn't return None for altaz, but nan check is safe
                 data.append((np.nan, np.nan))
                 prev_theta, prev_r = None, None
                 continue

@@ -113,10 +113,13 @@ def create_app() -> Flask:
     def ratelimit_handler(e: Any) -> Response:
         return make_response(f"Too Many Requests: {e.description}", 429)
 
-    def cached(timeout: int = 59) -> Callable:
+    def cached(timeout: int = 55) -> Callable:
         def decorator(f: Callable) -> Callable:
             @wraps(f)
             def decorated_function(*args: Any, **kwargs: Any) -> Any:
+                import time
+                start_time = time.time()
+                
                 # Prepare log info container
                 from flask import g
                 
@@ -132,11 +135,12 @@ def create_app() -> Flask:
                 cached_image = cache.get(cache_key)
                 
                 def log_request(img_status: str, ana_status: str):
+                    duration = time.time() - start_time
                     visitor_ip = request.remote_addr
                     # Reconstruct query string from args to ensure sorted/consistent or just use raw
                     # Using raw query string is better for debugging exact requests
                     url_args = request.query_string.decode('utf-8')
-                    logging.info(f"{visitor_ip} | Image: {img_status} | Analemma: {ana_status} | Args: {url_args}")
+                    logging.info(f"{visitor_ip} | Image: {img_status} | Analemma: {ana_status} | Duration: {duration:.2f}s | Args: {url_args}")
 
                 if cached_image:
                     image_cache_status = "HIT"
