@@ -292,7 +292,7 @@ class SkyPlotter:
         # Analemmas
         if self.config.get('show_analemma', False):
             for analemma in self.calculator.get_analemmas(self.dark_mode):
-                analemma.draw(ax)
+                analemma.draw(ax, when)
 
         # Sun paths
         today_sunpath = BodyPath(sky_data.eph[SUN], when.replace(hour=0, minute=0, second=0, microsecond=0), self, "-", color="orange", linewidth=1, alpha=0.8, dark_mode=self.dark_mode)
@@ -538,7 +538,7 @@ class AnalemmaPath:
         if data:
             self.path = list(zip(*data)) # type: ignore
             
-    def draw(self, ax: Axes) -> None:
+    def draw(self, ax: Axes, when: Optional[datetime.datetime] = None) -> None:
         if self.path:
             ax.plot(*self.path, self.fmt, color=self.color, linewidth=self.linewidth, alpha=self.alpha)
             clean_path = [p for p in zip(*self.path) if not np.isnan(p[1])]
@@ -552,6 +552,20 @@ class AnalemmaPath:
                 bbox_props = dict(boxstyle="round,pad=0.1", fc=self.label_background_color, ec="none", alpha=0.6) if self.label_background_color else None
                 
                 ax.text(lbl_theta, lbl_r, f"{self._hour}", fontsize=6, color=self.color, ha='center', va='center', fontweight='bold', alpha=0.8, clip_on=True, bbox=bbox_props)
+
+        # Draw "Today" dot
+        if when:
+            # Construct time for this analemma's hour on the given day
+            # We use the fixed_tz derived from the calculator context to stay consistent with the curve
+            dt = datetime.datetime(when.year, when.month, when.day, self._hour, 0, 0, tzinfo=self._fixed_tz)
+            
+            # Calculate position
+            theta, r = self._context.get_position(self._body, dt)
+            
+            if r is not None and r <= 90:
+                # Draw the dot
+                # Use the same color as the line but fully opaque
+                ax.scatter(theta, r, s=15, color=self.color, edgecolors='none', alpha=1.0, zorder=4)
 
 def moon_bright_limb_rotation_deg(observer, ts, eph, when, lat_deg, lon_deg):
     """
