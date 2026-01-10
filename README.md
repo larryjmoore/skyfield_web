@@ -112,12 +112,24 @@ You can customize the chart by providing query parameters:
 *   `show_legend`: `true` or `false` (default: `true`)
 *   `show_stats`: `true` or `false` (default: `true`) - Shows/hides all extra statistics (twilight, solar noon, next event, moon info).
 *   `dark_mode`: `true`, `false`, or `auto` (default: `false`). Set to `auto` to enable dark mode automatically when the Sun is below the horizon.
+*   `refresh`: `true` or `false` (default: `false`). Set to `true` to force a cache refresh. This bypasses the cache read but updates the cache with the new result. Useful for warming scripts.
 
 Example:
 
 ```
 http://localhost:8000/skychart.png?lat=34.1&lon=-118.2&gmt_offset=-7&show_constellation=true
 ```
+
+## Cache Warming
+
+To ensure users always get a fast "Cache HIT" response, you can run a warming script (e.g., via `cron`) every minute. Use the `refresh=true` parameter to ensure the script always generates a new image and updates the shared cache:
+
+```bash
+# Example crontab entry to warm the cache every minute
+* * * * * curl -s "http://localhost:8000/skychart.png?lat=40.7&lon=-111.8&dark_mode=auto&refresh=true" > /dev/null
+```
+
+The application uses a `120s` default cache timeout, so a `60s` warming interval ensures the cache never expires for your users.
 
 ## Running Tests
 

@@ -119,7 +119,7 @@ def create_app() -> Flask:
     def ratelimit_handler(e: Any) -> Response:
         return make_response(f"Too Many Requests: {e.description}", 429)
 
-    def cached(timeout: int = 55) -> Callable:
+    def cached(timeout: int = 120) -> Callable:
         def decorator(f: Callable) -> Callable:
             @wraps(f)
             def decorated_function(*args: Any, **kwargs: Any) -> Any:
@@ -133,12 +133,18 @@ def create_app() -> Flask:
                 show_analemma_str = request.args.get('show_analemma', 'false')
                 is_analemma_requested = parse_bool_str(show_analemma_str)
                 
+                # Check for force refresh
+                force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+
                 # Default states
                 g.analemma_status = "HIT" if is_analemma_requested else "N/A"
                 image_cache_status = "MISS"
 
-                cache_key = str(sorted(request.args.items()))
-                cached_image = cache.get(cache_key)
+                # Generate cache key excluding 'refresh' so the script warms the public key
+                args_to_hash = {k: v for k, v in request.args.items() if k != 'refresh'}
+                cache_key = str(sorted(args_to_hash.items()))
+                
+                cached_image = None if force_refresh else cache.get(cache_key)
                 
                 def log_request(img_status: str, ana_status: str):
                     duration = time.time() - start_time
