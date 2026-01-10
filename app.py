@@ -54,8 +54,14 @@ def parse_bool_str(v: Any) -> bool:
         return False
     return str(v).lower() in ['true', '1', 'yes', 'on']
 
+def parse_dark_mode(v: Any) -> Union[bool, str]:
+    if isinstance(v, str) and v.lower() == 'auto':
+        return 'auto'
+    return parse_bool_str(v)
+
 GMT_Offset = Annotated[float, BeforeValidator(parse_gmt_offset_str)]
 Bool_Param = Annotated[bool, BeforeValidator(parse_bool_str)]
+DarkMode_Param = Annotated[Union[bool, str], BeforeValidator(parse_dark_mode)]
 
 class SkyChartParams(BaseModel):
     lat: float = Field(default=DEFAULT_LAT)
@@ -70,7 +76,7 @@ class SkyChartParams(BaseModel):
     show_legend: Bool_Param = True
     north_up: Bool_Param = False
     show_stats: Bool_Param = True
-    dark_mode: Bool_Param = False
+    dark_mode: DarkMode_Param = False
 
 def create_app() -> Flask:
     """Creates and configures the Flask app."""
@@ -184,6 +190,24 @@ def create_app() -> Flask:
         except (ValidationError, ValueError, TypeError) as e:
             return f"Error: Invalid parameters - {e}", 400
 
+        if params.when:
+            try:
+                # Use dateutil.parser for robust date/time parsing
+                naive_when = dateutil_parse(params.when.replace('_', ' '))
+                when_aware = naive_when.replace(tzinfo=tz)
+            except ValueError as e:
+                return f"Error: Invalid 'when' parameter format. Could not parse date/time - {e}", 400
+        else:
+            when_aware = datetime.datetime.now(tz)
+
+        final_dark_mode = params.dark_mode
+        if final_dark_mode == 'auto':
+            # Calculate sun position to determine if it is night
+            calc = bodies.SkyCalculator((params.lat, params.lon), tz)
+            _, r = calc.compute_position(bodies.sky_data.eph[bodies.SUN], when_aware)
+            # r is 90 - altitude. So if r > 90, altitude is negative (below horizon).
+            final_dark_mode = (r > 90)
+
         sky = bodies.Sky(
             latlong=(params.lat, params.lon),
             tz=tz,
@@ -194,20 +218,10 @@ def create_app() -> Flask:
             show_legend=params.show_legend,
             north_up=params.north_up,
             show_stats=params.show_stats,
-            dark_mode=params.dark_mode,
+            dark_mode=final_dark_mode,
             image_type="png"
         )
         sky.load()
-
-        if params.when:
-            try:
-                # Use dateutil.parser for robust date/time parsing
-                naive_when = dateutil_parse(params.when.replace('_', ' '))
-                when_aware = naive_when.replace(tzinfo=tz)
-            except ValueError as e:
-                return f"Error: Invalid 'when' parameter format. Could not parse date/time - {e}", 400
-        else:
-            when_aware = datetime.datetime.now(tz)
 
         buf = io.BytesIO()
         sky.plot_sky(output=buf, when=when_aware)

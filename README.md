@@ -16,8 +16,8 @@ https://skyfieldweb.duckdns.org/skychart.png?
     lat={{ state_attr('zone.home', 'latitude') }}&
     lon={{ state_attr('zone.home', 'longitude') }}&
     gmt_offset={{ now().strftime('%z') }}&
-    show_analemma=true
-    {% if is_state('sun.sun', 'below_horizon') %}&dark_mode=true{% endif %}
+    show_analemma=true&
+    dark_mode=auto
 ```
 
 ## Features
@@ -111,7 +111,7 @@ You can customize the chart by providing query parameters:
 *   `show_time`: `true` or `false` (default: `true`)
 *   `show_legend`: `true` or `false` (default: `true`)
 *   `show_stats`: `true` or `false` (default: `true`) - Shows/hides all extra statistics (twilight, solar noon, next event, moon info).
-*   `dark_mode`: `true` or `false` (default: `false`)
+*   `dark_mode`: `true`, `false`, or `auto` (default: `false`). Set to `auto` to enable dark mode automatically when the Sun is below the horizon.
 
 Example:
 

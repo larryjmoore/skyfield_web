@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch, MagicMock
 from app import create_app
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -174,6 +175,49 @@ class AppTestCase(unittest.TestCase):
     def test_when_missing(self):
         response = self.client.get('/skychart.png') # Should default to current time
         self.assertEqual(response.status_code, 200)
+
+    @patch('app.bodies.Sky')
+    @patch('app.bodies.SkyCalculator')
+    def test_dark_mode_auto_night(self, mock_calculator, mock_sky):
+        # Mock Calculator to simulate night (Sun below horizon -> r > 90)
+        mock_calc_instance = MagicMock()
+        mock_calculator.return_value = mock_calc_instance
+        # compute_position returns (theta, r). 
+        # Night: r > 90. Let's return (0, 100)
+        mock_calc_instance.compute_position.return_value = (0.0, 100.0)
+
+        # Mock Sky to just return an object with load/plot_sky methods
+        mock_sky_instance = MagicMock()
+        mock_sky.return_value = mock_sky_instance
+
+        # Call with dark_mode=auto
+        response = self.client.get('/skychart.png?dark_mode=auto&lat=40&lon=-111')
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify bodies.Sky was initialized with dark_mode=True
+        # Check call args of mock_sky
+        args, kwargs = mock_sky.call_args
+        self.assertTrue(kwargs.get('dark_mode'), "Expected dark_mode=True for night time")
+
+    @patch('app.bodies.Sky')
+    @patch('app.bodies.SkyCalculator')
+    def test_dark_mode_auto_day(self, mock_calculator, mock_sky):
+        # Mock Calculator to simulate day (Sun above horizon -> r <= 90)
+        mock_calc_instance = MagicMock()
+        mock_calculator.return_value = mock_calc_instance
+        # Day: r <= 90. Let's return (0, 45)
+        mock_calc_instance.compute_position.return_value = (0.0, 45.0)
+
+        mock_sky_instance = MagicMock()
+        mock_sky.return_value = mock_sky_instance
+
+        response = self.client.get('/skychart.png?dark_mode=auto&lat=40&lon=-111')
+        self.assertEqual(response.status_code, 200)
+
+        # Verify bodies.Sky was initialized with dark_mode=False
+        args, kwargs = mock_sky.call_args
+        self.assertFalse(kwargs.get('dark_mode'), "Expected dark_mode=False for day time")
 
 if __name__ == '__main__':
     unittest.main()
