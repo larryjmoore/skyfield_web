@@ -107,7 +107,7 @@ def create_app() -> Flask:
     def ratelimit_handler(e: Any) -> Response:
         return make_response(f"Too Many Requests: {e.description}", 429)
 
-    def cached(timeout: int = 31536000) -> Callable:
+    def cached(timeout: int = 59) -> Callable:
         def decorator(f: Callable) -> Callable:
             @wraps(f)
             def decorated_function(*args: Any, **kwargs: Any) -> Any:
