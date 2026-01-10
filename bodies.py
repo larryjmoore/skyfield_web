@@ -55,6 +55,13 @@ def calculate_analemma_paths_data(lat: float, lon: float, tz_offset_seconds: flo
     Returns a dictionary mapping hour (int) to a list of (theta, r) tuples.
     This function is cached to avoid re-calculating for the same location.
     """
+    try:
+        from flask import has_request_context, g
+        if has_request_context():
+            g.analemma_status = "MISS"
+    except ImportError:
+        pass
+
     tz = datetime.timezone(datetime.timedelta(seconds=tz_offset_seconds))
     # We create a temporary calculator just for the math.
     calc = SkyCalculator((lat, lon), tz)

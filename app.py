@@ -92,6 +92,9 @@ def create_app() -> Flask:
         format='%(asctime)s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+    
+    # Disable default Werkzeug logging (request logs) to avoid double logging
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
     limiter = Limiter(
         get_remote_address,
@@ -108,16 +111,46 @@ def create_app() -> Flask:
         def decorator(f: Callable) -> Callable:
             @wraps(f)
             def decorated_function(*args: Any, **kwargs: Any) -> Any:
+                # Prepare log info container
+                from flask import g
+                
+                # Check show_analemma param for initial status
+                show_analemma_str = request.args.get('show_analemma', 'false')
+                is_analemma_requested = parse_bool_str(show_analemma_str)
+                
+                # Default states
+                g.analemma_status = "HIT" if is_analemma_requested else "N/A"
+                image_cache_status = "MISS"
+
                 cache_key = str(sorted(request.args.items()))
                 cached_image = cache.get(cache_key)
+                
+                def log_request(img_status: str, ana_status: str):
+                    visitor_ip = request.remote_addr
+                    # Reconstruct query string from args to ensure sorted/consistent or just use raw
+                    # Using raw query string is better for debugging exact requests
+                    url_args = request.query_string.decode('utf-8')
+                    logging.info(f"{visitor_ip} | Image: {img_status} | Analemma: {ana_status} | Args: {url_args}")
+
                 if cached_image:
-                    logging.info(f"Cache HIT for key: {cache_key}")
+                    image_cache_status = "HIT"
+                    # If image is cached, we don't calculate analemmas, so Analemma status is effectively Skipped/N/A
+                    # But per user request "Analemma cache hit or miss", if we skip it, it's not a hit or miss.
+                    # However, "HIT" implies we didn't do work. 
+                    # Let's mark it as "Skipped (Image Cached)" or just keep the initial intention.
+                    # If image is HIT, we return early.
+                    log_request("HIT", "Skipped")
+                    
                     response = make_response(send_file(io.BytesIO(cached_image), mimetype='image/png'))
                     response.headers.set('X-Cache', 'HIT')
                     return response
                 
-                logging.info(f"Cache MISS for key: {cache_key}")
+                # Image Cache MISS - Proceed to generate
                 result = f(*args, **kwargs)
+                
+                # After generation, check g.analemma_status (it might have changed to MISS in bodies.py)
+                log_request("MISS", g.analemma_status)
+                
                 if not isinstance(result, io.BytesIO):
                     return result
 
@@ -134,10 +167,6 @@ def create_app() -> Flask:
     @limiter.limit("1/second")
     @cached()
     def serve_sky_chart() -> Union[Response, tuple[str, int]]:
-        visitor_ip = request.remote_addr
-        requested_url = request.full_path.strip()
-        logging.info(f"{visitor_ip} | {requested_url}")
-
         try:
             # Pydantic validation
             params = SkyChartParams(**request.args.to_dict())
